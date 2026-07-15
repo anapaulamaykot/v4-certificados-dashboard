@@ -6,10 +6,10 @@
 <title>V4 · Ranking de Certificados</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
-<link rel="stylesheet" href="style.css?v=11" />
+<link rel="stylesheet" href="style.css?v=13" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=9"></script>
-<script src="common.js?v=11"></script>
+<script src="config.js?v=13"></script>
+<script src="common.js?v=13"></script>
 </head>
 <body>
   <div class="topbar">
@@ -184,10 +184,11 @@ function renderTable(containerId, list, tipo, opts) {
 
 // ---------- Load & compute ----------
 async function loadData() {
-  let rows, ativosRows;
+  let rows, ativosRows, overridesRows;
   try {
     rows = await fetchAllRows(() => supa.from('certificados').select('id_usuario,nome,email,filial,cargo,conteudo,data_emissao'));
     ativosRows = await fetchAllRows(() => supa.from('investidores_ativos').select('id_usuario,nome,email,filial,cargo,ativo').eq('ativo', true));
+    overridesRows = await fetchAllRows(() => supa.from('filial_overrides').select('email,filial'));
   } catch (e) {
     document.getElementById('updatedChip').textContent = 'Erro ao carregar dados';
     console.error(e);
@@ -195,7 +196,7 @@ async function loadData() {
   }
   allCertRows = rows;
 
-  const activeIndex = buildActiveLookup(ativosRows);
+  const activeIndex = buildActiveLookup(ativosRows, overridesRows);
 
   // último snapshot anterior a hoje, pra calcular variação
   const today = new Date().toISOString().slice(0, 10);
