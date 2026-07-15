@@ -353,4 +353,4 @@ main {
   .podium-slot.rank-1, .podium-slot.rank-2, .podium-slot.rank-3 { order: initial; }
   .rank-row { grid-template-columns: 32px 1fr 80px; }
   .rank-row .col-invest, .rank-row .col-media { display: none; }
-}
+}.
