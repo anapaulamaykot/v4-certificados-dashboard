@@ -5,11 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>V4 · Painel de Upload — Certificados</title>
 <meta name="robots" content="noindex, nofollow" />
-<link rel="stylesheet" href="style.css?v=6" />
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<link rel="stylesheet" href="style.css?v=7" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="config.js?v=6"></script>
-<script src="common.js?v=6"></script>
+<script src="config.js?v=7"></script>
+<script src="common.js?v=7"></script>
 <style>
   .admin-wrap { max-width: 640px; margin: 0 auto; padding: 60px 24px 100px; }
   .drop-zone {
@@ -151,13 +153,20 @@ async function handleFileAtivos(file) {
     atualizado_em: new Date().toISOString(),
   })).filter(r => r.id_usuario);
 
+  const antesFiltroEmail = rowsRaw.length;
+  const rowsEmailValido = rowsRaw.filter(r => r.email && r.email.toLowerCase().trim().endsWith('@v4company.com'));
+  const excluidosEmail = antesFiltroEmail - rowsEmailValido.length;
+  if (excluidosEmail > 0) {
+    logAtivos(`⚠️ ${excluidosEmail} pessoa(s) excluída(s) por não ter e-mail @v4company.com.`);
+  }
+
   // O Postgres não aceita duas linhas com o mesmo ID no mesmo upsert
   // ("ON CONFLICT DO UPDATE cannot affect row a second time") — dedupe
   // mantendo a última ocorrência de cada ID.
   const dedupMap = new Map();
-  rowsRaw.forEach(r => dedupMap.set(r.id_usuario, r));
+  rowsEmailValido.forEach(r => dedupMap.set(r.id_usuario, r));
   const rows = Array.from(dedupMap.values());
-  const duplicatas = rowsRaw.length - rows.length;
+  const duplicatas = rowsEmailValido.length - rows.length;
   if (duplicatas > 0) {
     logAtivos(`⚠️ ${duplicatas} linha(s) duplicada(s) no arquivo (mesmo ID repetido) — mantida a última ocorrência de cada uma.`);
   }
