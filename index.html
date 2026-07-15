@@ -6,10 +6,10 @@
 <title>V4 · Ranking de Certificados</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
-<link rel="stylesheet" href="style.css?v=15" />
+<link rel="stylesheet" href="style.css?v=18" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=15"></script>
-<script src="common.js?v=15"></script>
+<script src="config.js?v=18"></script>
+<script src="common.js?v=18"></script>
 </head>
 <body>
   <div class="topbar">
@@ -22,6 +22,7 @@
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="unidades">Ranking por Unidade</button>
+    <button class="tab-btn" data-tab="geral">Ranking Geral</button>
     <button class="tab-btn" data-tab="investidores">Ranking por Investidor</button>
   </div>
 
@@ -44,6 +45,19 @@
 
       <div class="podium" id="podiumUnidades"></div>
       <div class="rank-table" id="tableUnidades"></div>
+    </section>
+
+    <!-- ABA 2 — RANKING GERAL (todas as unidades juntas) -->
+    <section class="tab-panel" id="panel-geral">
+      <div class="section-head">
+        <div class="eyebrow">Todas as unidades</div>
+        <h2>Ranking Geral</h2>
+        <p>Todas as unidades juntas, sem separar por porte — útil pra visão consolidada, mas lembra que unidades muito diferentes em tamanho estão competindo lado a lado aqui.</p>
+      </div>
+
+      <div class="stat-strip" id="statsGeral"></div>
+      <div class="podium" id="podiumGeral"></div>
+      <div class="rank-table" id="tableGeral"></div>
     </section>
 
     <!-- ABA 2 — INVESTIDORES -->
@@ -226,6 +240,7 @@ async function loadData() {
     : `${fmtInt(rows.length)} certificados na base`;
 
   renderUnidades();
+  renderGeral();
   renderInvestidoresTab();
   populateFilters();
 }
@@ -262,6 +277,33 @@ function renderUnidades() {
   if (note) {
     note.textContent = `Considera só investidores ativos hoje e os certificados que eles geraram. Só concorrem ao pódio unidades com ${MIN_ATIVOS_PODIO}+ ativos.`;
   }
+}
+
+function renderGeral() {
+  const elegiveis = unidadesRanking.filter(u => u.elegivelPodio);
+  const top3 = elegiveis.slice(0, 3);
+  renderPodium('podiumGeral', top3, 'unidade',
+    u => fmtDec(u.media) + ' /investidor',
+    u => `${fmtInt(u.certificados)} certificados · ${fmtInt(u.ativos)} investidores ativos`);
+
+  document.getElementById('statsGeral').innerHTML = `
+    <div class="stat-cell"><div class="num">${fmtInt(unidadesRanking.length)}</div><div class="lbl">Unidades no total</div></div>
+    <div class="stat-cell"><div class="num">${fmtInt(allCertRows.length)}</div><div class="lbl">Certificados emitidos</div></div>
+    <div class="stat-cell"><div class="num">${top3[0] ? top3[0].nome : '—'}</div><div class="lbl">Unidade líder geral</div></div>
+  `;
+
+  renderTable('tableGeral', unidadesRanking, 'unidade', {
+    nameLabel: 'Unidade',
+    col2Label: 'Ativos',
+    col3Label: 'Total',
+    metricLabel: 'Média',
+    col2Fn: u => fmtInt(u.ativos),
+    col3Fn: u => fmtInt(u.certificados),
+    metricFn: u => fmtDec(u.media),
+    metaFn: u => u.tamanho.label,
+    expandable: true,
+    expandField: 'pessoasCertificadas',
+  });
 }
 
 function renderInvestidoresTab() {
