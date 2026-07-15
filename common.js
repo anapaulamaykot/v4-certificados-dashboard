@@ -71,12 +71,58 @@ function keyOf(id) {
   return id === null || id === undefined ? '' : String(id).trim();
 }
 
+// O Supabase limita cada consulta a 1000 linhas por padrão — com milhares
+// de certificados/investidores isso truncaria os dados silenciosamente.
+// Essa função pagina automaticamente até trazer tudo.
+async function fetchAllRows(queryBuilderFn, pageSize) {
+  pageSize = pageSize || 1000;
+  let all = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await queryBuilderFn().range(from, from + pageSize - 1);
+    if (error) throw error;
+    all = all.concat(data || []);
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
+// Constrói um índice de busca de investidores ativos por ID e por e-mail
+// (e-mail funciona como respaldo quando o ID não bate entre as duas bases).
+// Retorna { lookup, roster } — lookup resolve qualquer linha de certificado
+// à pessoa ativa correta; roster é a lista canônica de ativos (1 por pessoa).
+function buildActiveLookup(ativosRows) {
+  const lookup = new Map();
+  const roster = new Map(); // id canônico -> info
+  (ativosRows || []).forEach(r => {
+    const id = keyOf(r.id_usuario);
+    const email = (r.email || '').toLowerCase().trim();
+    const canonicalId = id || ('email:' + email);
+    const info = { id: canonicalId, nome: r.nome, filial: r.filial, cargo: r.cargo, email: r.email };
+    if (id) lookup.set('id:' + id, info);
+    if (email) lookup.set('email:' + email, info);
+    roster.set(canonicalId, info);
+  });
+  return { lookup, roster };
+}
+
+// Resolve a qual investidor ativo uma linha de certificado pertence,
+// tentando primeiro por ID e depois por e-mail.
+function resolveInvestor(row, lookup) {
+  const id = keyOf(row.id_usuario);
+  if (id && lookup.has('id:' + id)) return lookup.get('id:' + id);
+  const email = (row.email || '').toLowerCase().trim();
+  if (email && lookup.has('email:' + email)) return lookup.get('email:' + email);
+  return null;
+}
+
 // Constrói o ranking de unidades usando SÓ investidores ativos como universo:
 // tanto o denominador (quantos ativos tem a unidade) quanto o numerador
 // (quantos certificados eles geraram) vêm exclusivamente de quem está ativo hoje.
-// activeInvestorsMap: Map(id_usuario -> { filial, cargo, nome })
-function buildRankingUnidades(certRows, activeInvestorsMap) {
-  activeInvestorsMap = activeInvestorsMap || new Map();
+// Cada linha do arquivo de certificados vale 1, independente de ter ID preenchido.
+function buildRankingUnidades(certRows, activeIndex) {
+  const { lookup, roster } = activeIndex || { lookup: new Map(), roster: new Map() };
   const byFilial = new Map();
 
   const normFilial = (f) => {
@@ -85,22 +131,19 @@ function buildRankingUnidades(certRows, activeInvestorsMap) {
     return filial;
   };
 
-  // Primeiro registra todo mundo ativo na sua unidade (garante o denominador
-  // certo mesmo pra quem ainda não tirou nenhum certificado)
-  for (const [id, info] of activeInvestorsMap.entries()) {
+  for (const [id, info] of roster.entries()) {
     const filial = normFilial(info.filial);
     if (!byFilial.has(filial)) byFilial.set(filial, { certificados: 0, comCertificado: new Set(), ativos: new Set() });
     byFilial.get(filial).ativos.add(id);
   }
 
-  // Depois soma só os certificados de gente que está nesse mapa de ativos
   for (const r of certRows) {
-    const id = keyOf(r.id_usuario);
-    if (!activeInvestorsMap.has(id)) continue;
-    const filial = normFilial(activeInvestorsMap.get(id).filial);
+    const investor = resolveInvestor(r, lookup);
+    if (!investor) continue;
+    const filial = normFilial(investor.filial);
     const entry = byFilial.get(filial);
     entry.certificados += 1;
-    entry.comCertificado.add(id);
+    entry.comCertificado.add(investor.id);
   }
 
   const list = [];
@@ -126,12 +169,12 @@ function buildRankingUnidades(certRows, activeInvestorsMap) {
 // Constrói o ranking de investidores — só investidores ATIVOS entram,
 // mesmo que ainda tenham zero certificados (aparecem no fim da lista).
 // Cada investidor carrega a lista de nomes dos certificados que gerou.
-function buildRankingInvestidores(certRows, activeInvestorsMap) {
-  activeInvestorsMap = activeInvestorsMap || new Map();
+function buildRankingInvestidores(certRows, activeIndex) {
+  const { lookup, roster } = activeIndex || { lookup: new Map(), roster: new Map() };
   const byUser = new Map();
 
-  for (const [id, info] of activeInvestorsMap.entries()) {
-    byUser.set(keyOf(id), {
+  for (const [id, info] of roster.entries()) {
+    byUser.set(id, {
       nome: info.nome || id,
       filial: info.filial && info.filial.trim() ? info.filial.trim() : 'Matriz / Sem Unidade',
       cargo: info.cargo && info.cargo.trim() ? info.cargo.trim() : 'Não informado',
@@ -142,9 +185,9 @@ function buildRankingInvestidores(certRows, activeInvestorsMap) {
   }
 
   for (const r of certRows) {
-    const id = keyOf(r.id_usuario);
-    if (!byUser.has(id)) continue;
-    const u = byUser.get(id);
+    const investor = resolveInvestor(r, lookup);
+    if (!investor) continue;
+    const u = byUser.get(investor.id);
     u.certificados += 1;
     if (r.conteudo) u.certificadosNomes.push(r.conteudo);
   }
