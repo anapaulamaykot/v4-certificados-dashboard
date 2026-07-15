@@ -7,11 +7,11 @@
 <meta name="robots" content="noindex, nofollow" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
-<link rel="stylesheet" href="style.css?v=15" />
+<link rel="stylesheet" href="style.css?v=16" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="config.js?v=15"></script>
-<script src="common.js?v=15"></script>
+<script src="config.js?v=16"></script>
+<script src="common.js?v=16"></script>
 <style>
   .admin-wrap { max-width: 640px; margin: 0 auto; padding: 60px 24px 100px; }
   .drop-zone {
@@ -396,6 +396,22 @@ async function handleFile(file) {
     return;
   }
 
+  // O export às vezes traz o MESMO certificado duplicado pra mesma pessoa
+  // (linha idêntica repetida) — isso não é "duas pessoas com nome igual",
+  // é erro de export, então aqui sim deduplicamos.
+  const seenPersonCert = new Set();
+  const rowsSemDuplicataExata = rows.filter(r => {
+    const email = (r.email || '').toLowerCase().trim();
+    const key = (email || (r.nome || '').toLowerCase().trim()) + '|' + (r.conteudo || '').toLowerCase().trim();
+    if (seenPersonCert.has(key)) return false;
+    seenPersonCert.add(key);
+    return true;
+  });
+  const duplicatasExatas = rows.length - rowsSemDuplicataExata.length;
+  if (duplicatasExatas > 0) {
+    log(`⚠️ ${duplicatasExatas} certificado(s) duplicado(s) no arquivo (mesma pessoa + mesmo certificado repetido) — removidos.`);
+  }
+
   const { count: countBefore } = await supa.from('certificados').select('*', { count: 'exact', head: true });
 
   log('Limpando base do dia anterior...');
@@ -406,8 +422,8 @@ async function handleFile(file) {
 
   const BATCH = 400;
   let sent = 0;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = rows.slice(i, i + BATCH);
+  for (let i = 0; i < rowsSemDuplicataExata.length; i += BATCH) {
+    const batch = rowsSemDuplicataExata.slice(i, i + BATCH);
     const { error } = await supa.from('certificados').insert(batch);
     if (error) {
       log(`⚠️ Erro no lote ${i / BATCH + 1}: ${error.message}`);
@@ -415,8 +431,8 @@ async function handleFile(file) {
       return;
     }
     sent += batch.length;
-    setProgress(20 + (sent / rows.length) * 50);
-    log(`Lote ${Math.ceil((i + 1) / BATCH)} de ${Math.ceil(rows.length / BATCH)} sincronizado (${sent}/${rows.length})`);
+    setProgress(20 + (sent / rowsSemDuplicataExata.length) * 50);
+    log(`Lote ${Math.ceil((i + 1) / BATCH)} de ${Math.ceil(rowsSemDuplicataExata.length / BATCH)} sincronizado (${sent}/${rowsSemDuplicataExata.length})`);
   }
 
   log('Recalculando ranking do dia...');
