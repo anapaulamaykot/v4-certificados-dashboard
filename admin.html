@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>V4 · Painel de Upload — Certificados</title>
+<meta name="robots" content="noindex, nofollow" />
+<link rel="stylesheet" href="style.css?v=3" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="config.js?v=3"></script>
+<script src="common.js?v=3"></script>
+<style>
+  .admin-wrap { max-width: 640px; margin: 0 auto; padding: 60px 24px 100px; }
+  .drop-zone {
+    border: 2px dashed var(--line);
+    border-radius: 14px;
+    padding: 48px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    background: var(--paper);
+  }
+  .drop-zone.hover, .drop-zone:hover { border-color: var(--red); background: var(--red-04); }
+  .drop-zone .icon { font-size: 30px; margin-bottom: 10px; }
+  .drop-zone .main-txt { font-weight: 600; font-size: 14.5px; }
+  .drop-zone .sub-txt { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; }
+  #fileInput { display: none; }
+  .log-box {
+    margin-top: 26px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+    font-size: 13px;
+    line-height: 1.7;
+    display: none;
+  }
+  .log-box.show { display: block; }
+  .log-line { display: flex; gap: 8px; align-items: baseline; }
+  .log-line .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); flex-shrink: 0; margin-top: 6px; }
+  .progress-track { height: 6px; background: var(--line); border-radius: 100px; overflow: hidden; margin-top: 14px; display: none; }
+  .progress-track.show { display: block; }
+  .progress-bar { height: 100%; width: 0%; background: var(--red); transition: width 0.2s; }
+  .result-card { margin-top: 22px; display: none; }
+  .result-card.show { display: block; }
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .result-cell { background: var(--paper); padding: 16px; text-align: center; }
+  .result-cell .n { font-family: 'IBM Plex Sans Condensed', sans-serif; font-weight: 700; font-size: 24px; color: var(--red); }
+  .result-cell .l { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+  a.view-link { display: inline-block; margin-top: 20px; font-size: 13.5px; font-weight: 600; color: var(--red); text-decoration: none; }
+  a.view-link:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <img src="https://i.ibb.co/XxfLTD2L/logov4company.png" alt="V4 Company" class="brand-logo" />
+      <div class="brand-name"><span>Painel de Upload · Certificados</span></div>
+    </div>
+  </div>
+
+  <div class="admin-wrap">
+    <div class="eyebrow">Rotina diária</div>
+    <h2 style="font-size:24px; margin-top:6px;">Sincronizar planilha de certificados</h2>
+    <p style="color:var(--ink-soft); font-size:13.5px; margin-top:8px; line-height:1.6;">
+      Suba o Excel exportado do Growth Learning (Certificados por Usuário). O sistema atualiza os certificados
+      novos, ignora os que já existem e recalcula o ranking do dia automaticamente.
+    </p>
+
+    <div class="drop-zone" id="dropZone">
+      <div class="icon">📄</div>
+      <div class="main-txt">Clique ou arraste o arquivo aqui</div>
+      <div class="sub-txt">.xlsx ou .csv exportado do Growth Learning</div>
+    </div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
+
+    <div class="progress-track" id="progressTrack"><div class="progress-bar" id="progressBar"></div></div>
+
+    <div class="log-box" id="logBox"></div>
+
+    <div class="result-card" id="resultCard">
+      <div class="result-grid">
+        <div class="result-cell"><div class="n" id="rNew">–</div><div class="l">Certificados novos</div></div>
+        <div class="result-cell"><div class="n" id="rUpdated">–</div><div class="l">Já existiam</div></div>
+        <div class="result-cell"><div class="n" id="rTotal">–</div><div class="l">Total na base</div></div>
+      </div>
+      <a class="view-link" href="index.html" target="_blank">Ver dashboard atualizado →</a>
+    </div>
+
+    <hr style="border:none; border-top:1px solid var(--line); margin:56px 0 36px;" />
+
+    <div class="eyebrow">Atualização pontual</div>
+    <h2 style="font-size:20px; margin-top:6px;">Base de investidores ativos</h2>
+    <p style="color:var(--ink-soft); font-size:13.5px; margin-top:8px; line-height:1.6;">
+      Essa lista não muda todo dia — suba de novo só quando tiver uma atualização real do quadro de ativos
+      por unidade. Ela é o denominador real do ranking proporcional (certificados ÷ investidores ativos).
+    </p>
+
+    <div class="drop-zone" id="dropZoneAtivos" style="margin-top:16px;">
+      <div class="icon">👥</div>
+      <div class="main-txt">Clique ou arraste o arquivo de investidores ativos</div>
+      <div class="sub-txt">.csv exportado do Growth Learning (separado por ;)</div>
+    </div>
+    <input type="file" id="fileInputAtivos" accept=".csv" />
+
+    <div class="log-box" id="logBoxAtivos"></div>
+  </div>
+
+<script>
+const dropZoneAtivos = document.getElementById('dropZoneAtivos');
+const fileInputAtivos = document.getElementById('fileInputAtivos');
+const logBoxAtivos = document.getElementById('logBoxAtivos');
+
+dropZoneAtivos.addEventListener('click', () => fileInputAtivos.click());
+dropZoneAtivos.addEventListener('dragover', (e) => { e.preventDefault(); dropZoneAtivos.classList.add('hover'); });
+dropZoneAtivos.addEventListener('dragleave', () => dropZoneAtivos.classList.remove('hover'));
+dropZoneAtivos.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZoneAtivos.classList.remove('hover');
+  if (e.dataTransfer.files.length) handleFileAtivos(e.dataTransfer.files[0]);
+});
+fileInputAtivos.addEventListener('change', (e) => {
+  if (e.target.files.length) handleFileAtivos(e.target.files[0]);
+});
+
+function logAtivos(msg) {
+  logBoxAtivos.classList.add('show');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="dot"></span><span>${msg}</span>`;
+  logBoxAtivos.appendChild(line);
+  logBoxAtivos.scrollTop = logBoxAtivos.scrollHeight;
+}
+
+async function handleFileAtivos(file) {
+  logBoxAtivos.innerHTML = '';
+  logAtivos(`Lendo <strong>${file.name}</strong>...`);
+
+  const text = await file.text();
+  const raw = parseSemicolonCSV(text);
+  logAtivos(`Encontradas ${raw.length} linhas.`);
+
+  const rows = raw.map(r => ({
+    id_usuario: String(r.id).trim(),
+    nome: r.name,
+    email: r.email,
+    cargo: r.cargo && r.cargo.trim() ? r.cargo.trim() : 'Não informado',
+    filial: r.filial && r.filial.trim() ? r.filial.trim() : 'Matriz / Sem Unidade',
+    ativo: String(r.active).toLowerCase() === 'true',
+    atualizado_em: new Date().toISOString(),
+  })).filter(r => r.id_usuario);
+
+  logAtivos('Limpando base anterior...');
+  await supa.from('investidores_ativos').delete().neq('id_usuario', '___none___');
+
+  const BATCH = 500;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    const { error } = await supa.from('investidores_ativos').upsert(batch, { onConflict: 'id_usuario' });
+    if (error) { logAtivos(`⚠️ Erro: ${error.message}`); console.error(error); return; }
+    logAtivos(`${Math.min(i + BATCH, rows.length)}/${rows.length} sincronizados`);
+  }
+
+  const ativosCount = rows.filter(r => r.ativo).length;
+  logAtivos(`✅ Base atualizada — ${fmtInt(rows.length)} pessoas, ${fmtInt(ativosCount)} ativas.`);
+}
+</script>
+
+<script>
+const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+const logBox = document.getElementById('logBox');
+const progressTrack = document.getElementById('progressTrack');
+const progressBar = document.getElementById('progressBar');
+const resultCard = document.getElementById('resultCard');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('hover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('hover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', (e) => {
+  if (e.target.files.length) handleFile(e.target.files[0]);
+});
+
+function log(msg) {
+  logBox.classList.add('show');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="dot"></span><span>${msg}</span>`;
+  logBox.appendChild(line);
+  logBox.scrollTop = logBox.scrollHeight;
+}
+
+function setProgress(pct) {
+  progressTrack.classList.add('show');
+  progressBar.style.width = pct + '%';
+}
+
+const COLMAP = {
+  'ID do Usuário': 'id_usuario',
+  'Nome': 'nome',
+  'Email': 'email',
+  'Tipo do certificado': 'tipo_certificado',
+  'Nome do Conteúdo ou Missão': 'conteudo',
+  'Data de Emissão do Certificado': 'data_emissao',
+  'ID do Certificado': 'id_certificado',
+  'Carga Horária do Conteúdo ou da Missão': 'carga_horaria',
+  'CPF': 'cpf',
+  'Cargo': 'cargo',
+  'Data de admissão': 'data_admissao',
+  'Filial': 'filial',
+};
+
+async function handleFile(file) {
+  logBox.innerHTML = '';
+  resultCard.classList.remove('show');
+  log(`Lendo <strong>${file.name}</strong>...`);
+  setProgress(8);
+
+  const buf = await file.arrayBuffer();
+  const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+  log(`Encontradas <strong>${raw.length}</strong> linhas. Mapeando colunas...`);
+  setProgress(15);
+
+  const { count: countBefore } = await supa.from('certificados').select('*', { count: 'exact', head: true });
+
+  const rows = raw.map((r) => {
+    const out = {};
+    for (const [colName, field] of Object.entries(COLMAP)) {
+      out[field] = r[colName] !== undefined ? r[colName] : null;
+    }
+    if (out.data_emissao) out.data_emissao = excelSerialToISODate(out.data_emissao) || out.data_emissao;
+    if (out.data_admissao) out.data_admissao = excelSerialToISODate(out.data_admissao) || out.data_admissao;
+    if (out.carga_horaria === '') out.carga_horaria = null;
+    if (out.id_usuario !== null && out.id_usuario !== undefined) out.id_usuario = String(out.id_usuario).trim();
+    if (!out.filial || !String(out.filial).trim()) out.filial = 'Matriz / Sem Unidade';
+    if (!out.cargo || !String(out.cargo).trim()) out.cargo = 'Não informado';
+    out.atualizado_em = new Date().toISOString();
+    return out;
+  }).filter(r => r.id_certificado);
+
+  log(`Enviando para o banco em lotes...`);
+
+  const BATCH = 400;
+  let sent = 0;
+  for (let i = 0; i < rows.length; i += BATCH) {
+    const batch = rows.slice(i, i + BATCH);
+    const { error } = await supa.from('certificados').upsert(batch, { onConflict: 'id_certificado' });
+    if (error) {
+      log(`⚠️ Erro no lote ${i / BATCH + 1}: ${error.message}`);
+      console.error(error);
+      return;
+    }
+    sent += batch.length;
+    setProgress(20 + (sent / rows.length) * 50);
+    log(`Lote ${Math.ceil((i + 1) / BATCH)} de ${Math.ceil(rows.length / BATCH)} sincronizado (${sent}/${rows.length})`);
+  }
+
+  log('Recalculando ranking do dia...');
+  setProgress(80);
+
+  const { data: allRows, error: fetchErr } = await supa.from('certificados').select('id_usuario,nome,filial,cargo');
+  if (fetchErr) { log(`⚠️ Erro ao ler base: ${fetchErr.message}`); return; }
+
+  const { data: ativosRows, error: ativosErr } = await supa.from('investidores_ativos').select('id_usuario,nome,filial,cargo,ativo').eq('ativo', true);
+  if (ativosErr) { log(`⚠️ Erro ao ler base de ativos: ${ativosErr.message}`); return; }
+  const activeInvestorsMap = new Map();
+  (ativosRows || []).forEach(r => activeInvestorsMap.set(String(r.id_usuario).trim(), { nome: r.nome, filial: r.filial, cargo: r.cargo }));
+
+  const today = new Date().toISOString().slice(0, 10);
+  await supa.from('snapshots_ranking').delete().eq('data_snapshot', today);
+
+  const unidades = buildRankingUnidades(allRows, activeInvestorsMap);
+  const investidores = buildRankingInvestidores(allRows, activeInvestorsMap);
+
+  const snapshotRows = [];
+  unidades.forEach((u, idx) => snapshotRows.push({
+    data_snapshot: today, tipo: 'unidade', nome_entidade: u.nome,
+    certificados_count: u.certificados, investidores_count: u.ativos,
+    media_por_investidor: u.media, posicao: idx + 1,
+  }));
+  investidores.forEach((inv, idx) => snapshotRows.push({
+    data_snapshot: today, tipo: 'investidor', nome_entidade: inv.nome,
+    certificados_count: inv.certificados, investidores_count: null,
+    media_por_investidor: null, posicao: idx + 1,
+  }));
+
+  for (let i = 0; i < snapshotRows.length; i += 500) {
+    const batch = snapshotRows.slice(i, i + 500);
+    const { error } = await supa.from('snapshots_ranking').insert(batch);
+    if (error) { log(`⚠️ Erro ao gravar ranking: ${error.message}`); return; }
+  }
+
+  setProgress(100);
+  log('✅ Sincronização concluída.');
+
+  const totalDepois = allRows.length;
+  const novos = Math.max(0, totalDepois - (countBefore || 0));
+  const jaExistiam = Math.max(0, rows.length - novos);
+
+  document.getElementById('rNew').textContent = fmtInt(novos);
+  document.getElementById('rUpdated').textContent = fmtInt(jaExistiam);
+  document.getElementById('rTotal').textContent = fmtInt(totalDepois);
+  resultCard.classList.add('show');
+}
+</script>
+</body>
+</html>

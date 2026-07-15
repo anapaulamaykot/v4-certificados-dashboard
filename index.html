@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>V4 · Ranking de Certificados</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<link rel="stylesheet" href="style.css?v=3" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js?v=3"></script>
+<script src="common.js?v=3"></script>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <img src="https://i.ibb.co/XxfLTD2L/logov4company.png" alt="V4 Company" class="brand-logo" />
+      <div class="brand-name"><span>Ranking de Certificados</span></div>
+    </div>
+    <div class="updated-chip" id="updatedChip">Carregando...</div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="unidades">Ranking por Unidade</button>
+    <button class="tab-btn" data-tab="investidores">Ranking por Investidor</button>
+  </div>
+
+  <main>
+    <!-- ABA 1 — UNIDADES -->
+    <section class="tab-panel active" id="panel-unidades">
+      <div class="section-head">
+        <div class="eyebrow">Ranking por Unidade</div>
+        <h2>Quem mais capacita, por investidor</h2>
+        <p>Unidades com o maior número de certificados. Ranking ordenado pela média de certificados por investidor, atualizado diariamente.</p>
+      </div>
+
+      <div class="stat-strip" id="statsUnidades"></div>
+      <div class="podium" id="podiumUnidades"></div>
+      <div class="rank-table" id="tableUnidades"></div>
+    </section>
+
+    <!-- ABA 2 — INVESTIDORES -->
+    <section class="tab-panel" id="panel-investidores">
+      <div class="section-head">
+        <div class="eyebrow">Ranking dos Investidores</div>
+        <h2>Quem mais se certificou</h2>
+        <p>Ranking individual de certificados emitidos. Use os filtros para olhar uma unidade, cargo ou pessoa específica.</p>
+      </div>
+
+      <div class="stat-strip" id="statsInvestidores"></div>
+      <div class="podium" id="podiumInvestidores"></div>
+
+      <div class="filters">
+        <input type="text" id="searchInvestidor" placeholder="Buscar investidor..." />
+        <select id="filterUnidade"><option value="">Todas as unidades</option></select>
+        <select id="filterCargo"><option value="">Todos os cargos</option></select>
+      </div>
+
+      <div class="rank-table" id="tableInvestidores"></div>
+    </section>
+  </main>
+
+<script>
+const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let allCertRows = [];
+let prevSnapshot = { unidade: new Map(), investidor: new Map() };
+let unidadesRanking = [];
+let investidoresRanking = [];
+
+// ---------- Tabs ----------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ---------- Movement chip ----------
+function moveChip(entityName, tipo, currentPos) {
+  const prevMap = prevSnapshot[tipo];
+  if (!prevMap.has(entityName)) return `<span class="move-chip move-flat">novo</span>`;
+  const prevPos = prevMap.get(entityName);
+  const diff = prevPos - currentPos;
+  if (diff > 0) return `<span class="move-chip move-up">▲ subiu ${diff}</span>`;
+  if (diff < 0) return `<span class="move-chip move-down">▼ caiu ${Math.abs(diff)}</span>`;
+  return `<span class="move-chip move-flat">estável</span>`;
+}
+
+// ---------- Podium render ----------
+function renderPodium(containerId, top3, tipo, metricFn, subFn) {
+  const el = document.getElementById(containerId);
+  if (top3.length === 0) { el.innerHTML = ''; return; }
+  const sizes = { 1: 108, 2: 84, 3: 84 };
+  el.innerHTML = top3.map((item, idx) => {
+    const rank = idx + 1;
+    const size = sizes[rank];
+    return `
+      <div class="podium-slot rank-${rank}">
+        <div class="seal" style="width:${size}px;height:${size}px;">
+          ${sealSVG(rank, size)}
+          <div class="seal-num" style="font-size:${size * 0.32}px;">${rank}</div>
+        </div>
+        <div class="podium-name">${item.nome}</div>
+        <div class="podium-metric">${metricFn(item)}</div>
+        <div class="podium-sub">${subFn(item)}</div>
+        ${moveChip(item.nome, tipo, rank)}
+      </div>
+    `;
+  }).join('');
+}
+
+// ---------- Table render ----------
+function renderTable(containerId, list, tipo, opts) {
+  const el = document.getElementById(containerId);
+  if (list.length === 0) {
+    el.innerHTML = `<div class="empty-state">Nenhum resultado encontrado com esses filtros.</div>`;
+    return;
+  }
+  const head = `
+    <div class="rank-row head">
+      <span>#</span>
+      <span>${opts.nameLabel}</span>
+      <span class="col-invest">${opts.col2Label || ''}</span>
+      <span class="col-media">${opts.col3Label || ''}</span>
+      <span>${opts.metricLabel}</span>
+    </div>`;
+  const rows = list.map((item, idx) => {
+    const pos = idx + 1;
+    return `
+      <div class="rank-row">
+        <span class="rank-pos ${pos <= 3 ? 'top3' : ''}">${pos}</span>
+        <span class="rank-name">${item.nome}${opts.metaFn ? `<span class="meta">${opts.metaFn(item)}</span>` : ''}</span>
+        <span class="col-invest">${opts.col2Fn ? opts.col2Fn(item) : ''}</span>
+        <span class="col-media">${opts.col3Fn ? opts.col3Fn(item) : ''}</span>
+        <span class="rank-metric">${opts.metricFn(item)}</span>
+      </div>`;
+  }).join('');
+  el.innerHTML = head + rows;
+}
+
+// ---------- Load & compute ----------
+async function loadData() {
+  const { data: rows, error } = await supa.from('certificados').select('id_usuario,nome,filial,cargo,data_emissao,atualizado_em');
+  if (error) {
+    document.getElementById('updatedChip').textContent = 'Erro ao carregar dados';
+    console.error(error);
+    return;
+  }
+  allCertRows = rows;
+
+  const { data: ativosRows, error: ativosErr } = await supa.from('investidores_ativos').select('id_usuario,nome,filial,cargo,ativo').eq('ativo', true);
+  if (ativosErr) console.error(ativosErr);
+  const activeInvestorsMap = new Map();
+  (ativosRows || []).forEach(r => activeInvestorsMap.set(String(r.id_usuario).trim(), { nome: r.nome, filial: r.filial, cargo: r.cargo }));
+
+  // último snapshot anterior a hoje, pra calcular variação
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: snapDates } = await supa
+    .from('snapshots_ranking')
+    .select('data_snapshot')
+    .order('data_snapshot', { ascending: false });
+
+  const uniqueDates = [...new Set((snapDates || []).map(r => r.data_snapshot))];
+  const priorDate = uniqueDates.find(d => d !== today);
+
+  if (priorDate) {
+    const { data: prevRows } = await supa
+      .from('snapshots_ranking')
+      .select('tipo,nome_entidade,posicao')
+      .eq('data_snapshot', priorDate);
+    (prevRows || []).forEach(r => {
+      prevSnapshot[r.tipo].set(r.nome_entidade, r.posicao);
+    });
+  }
+
+  unidadesRanking = buildRankingUnidades(allCertRows, activeInvestorsMap);
+  investidoresRanking = buildRankingInvestidores(allCertRows, activeInvestorsMap);
+
+  const lastUpdate = rows.reduce((max, r) => (r.atualizado_em && r.atualizado_em > max ? r.atualizado_em : max), '');
+  document.getElementById('updatedChip').textContent = lastUpdate
+    ? `Atualizado em ${new Date(lastUpdate).toLocaleDateString('pt-BR')}`
+    : `${fmtInt(rows.length)} certificados na base`;
+
+  renderUnidades();
+  renderInvestidoresTab();
+  populateFilters();
+}
+
+function renderUnidades() {
+  const elegiveis = unidadesRanking.filter(u => u.elegivelPodio);
+  const top3 = elegiveis.slice(0, 3);
+  renderPodium('podiumUnidades', top3, 'unidade',
+    u => fmtDec(u.media) + ' /investidor',
+    u => `${fmtInt(u.certificados)} certificados · ${fmtInt(u.ativos)} investidores ativos`);
+
+  document.getElementById('statsUnidades').innerHTML = `
+    <div class="stat-cell"><div class="num">${fmtInt(unidadesRanking.length)}</div><div class="lbl">Unidades participantes</div></div>
+    <div class="stat-cell"><div class="num">${fmtInt(allCertRows.length)}</div><div class="lbl">Certificados emitidos</div></div>
+    <div class="stat-cell"><div class="num">${top3[0] ? top3[0].nome : '—'}</div><div class="lbl">Unidade líder</div></div>
+  `;
+
+  renderTable('tableUnidades', unidadesRanking, 'unidade', {
+    nameLabel: 'Unidade',
+    col2Label: 'Ativos',
+    col3Label: 'Total',
+    metricLabel: 'Média',
+    col2Fn: u => fmtInt(u.ativos),
+    col3Fn: u => fmtInt(u.certificados),
+    metricFn: u => fmtDec(u.media),
+    metaFn: u => !u.elegivelPodio
+      ? `amostra pequena (${u.ativos} ativos) · fora da disputa do pódio`
+      : `${fmtDec(u.engajamento)}% dos ativos já certificados`,
+  });
+
+  const note = document.getElementById('unidadesNote');
+  if (note) {
+    note.textContent = `Considera só investidores ativos hoje e os certificados que eles geraram. Só concorrem ao pódio unidades com ${MIN_ATIVOS_PODIO}+ ativos.`;
+  }
+}
+
+function renderInvestidoresTab() {
+  applyInvestidorFilters();
+}
+
+function populateFilters() {
+  const unidadeSel = document.getElementById('filterUnidade');
+  const cargoSel = document.getElementById('filterCargo');
+  const unidades = [...new Set(investidoresRanking.map(i => i.filial))].sort();
+  const cargos = [...new Set(investidoresRanking.map(i => i.cargo))].sort();
+  unidades.forEach(u => unidadeSel.insertAdjacentHTML('beforeend', `<option value="${u}">${u}</option>`));
+  cargos.forEach(c => cargoSel.insertAdjacentHTML('beforeend', `<option value="${c}">${c}</option>`));
+
+  document.getElementById('searchInvestidor').addEventListener('input', applyInvestidorFilters);
+  unidadeSel.addEventListener('change', applyInvestidorFilters);
+  cargoSel.addEventListener('change', applyInvestidorFilters);
+}
+
+function applyInvestidorFilters() {
+  const q = (document.getElementById('searchInvestidor')?.value || '').toLowerCase().trim();
+  const unidade = document.getElementById('filterUnidade')?.value || '';
+  const cargo = document.getElementById('filterCargo')?.value || '';
+
+  let filtered = investidoresRanking;
+  if (q) filtered = filtered.filter(i => i.nome.toLowerCase().includes(q));
+  if (unidade) filtered = filtered.filter(i => i.filial === unidade);
+  if (cargo) filtered = filtered.filter(i => i.cargo === cargo);
+
+  const top3 = (!q && !unidade && !cargo) ? investidoresRanking.slice(0, 3) : filtered.slice(0, 3);
+
+  renderPodium('podiumInvestidores', top3, 'investidor',
+    i => fmtInt(i.certificados) + ' certificados',
+    i => `${i.filial} · ${i.cargo}`);
+
+  document.getElementById('statsInvestidores').innerHTML = `
+    <div class="stat-cell"><div class="num">${fmtInt(investidoresRanking.length)}</div><div class="lbl">Investidores certificados</div></div>
+    <div class="stat-cell"><div class="num">${fmtInt(filtered.length)}</div><div class="lbl">Nesta visualização</div></div>
+    <div class="stat-cell"><div class="num">${top3[0] ? top3[0].nome.split(' ')[0] : '—'}</div><div class="lbl">Líder da visualização</div></div>
+  `;
+
+  renderTable('tableInvestidores', filtered, 'investidor', {
+    nameLabel: 'Investidor',
+    metaFn: i => `${i.filial} · ${i.cargo}`,
+    metricLabel: 'Certificados',
+    metricFn: i => fmtInt(i.certificados),
+  });
+}
+
+loadData();
+</script>
+</body>
+</html>
