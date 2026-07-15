@@ -125,6 +125,7 @@ function buildRankingUnidades(certRows, activeInvestorsMap) {
 
 // Constrói o ranking de investidores — só investidores ATIVOS entram,
 // mesmo que ainda tenham zero certificados (aparecem no fim da lista).
+// Cada investidor carrega a lista de nomes dos certificados que gerou.
 function buildRankingInvestidores(certRows, activeInvestorsMap) {
   activeInvestorsMap = activeInvestorsMap || new Map();
   const byUser = new Map();
@@ -134,14 +135,18 @@ function buildRankingInvestidores(certRows, activeInvestorsMap) {
       nome: info.nome || id,
       filial: info.filial && info.filial.trim() ? info.filial.trim() : 'Matriz / Sem Unidade',
       cargo: info.cargo && info.cargo.trim() ? info.cargo.trim() : 'Não informado',
+      email: info.email || '',
       certificados: 0,
+      certificadosNomes: [],
     });
   }
 
   for (const r of certRows) {
     const id = keyOf(r.id_usuario);
     if (!byUser.has(id)) continue;
-    byUser.get(id).certificados += 1;
+    const u = byUser.get(id);
+    u.certificados += 1;
+    if (r.conteudo) u.certificadosNomes.push(r.conteudo);
   }
 
   const list = Array.from(byUser.values());
