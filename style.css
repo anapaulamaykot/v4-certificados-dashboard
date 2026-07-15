@@ -303,6 +303,27 @@ main {
 .rank-row:last-child { border-bottom: none; }
 .rank-row:not(.head):hover { background: var(--red-04); }
 
+.rank-row.expandable { cursor: pointer; }
+.rank-row.expandable .rank-metric { display: flex; align-items: center; justify-content: flex-end; gap: 5px; }
+.expand-caret { font-size: 10px; color: var(--ink-soft); transition: transform 0.15s; }
+.rank-row.expandable.open .expand-caret { transform: rotate(180deg); }
+.rank-row.expandable.open { background: var(--red-04); }
+
+.rank-detail {
+  padding: 4px 18px 16px 62px;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-soft);
+}
+.rank-detail-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cert-chip {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+
 .rank-pos {
   font-family: 'IBM Plex Sans Condensed', sans-serif;
   font-weight: 700;
