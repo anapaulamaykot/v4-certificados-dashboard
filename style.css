@@ -73,14 +73,23 @@ h1, h2, h3 {
   font-size: 17px;
 }
 
-.brand-name {
-  font-family: 'IBM Plex Sans Condensed', sans-serif;
-  font-weight: 700;
-  font-size: 17px;
-  letter-spacing: -0.01em;
+.brand-logo {
+  height: 26px;
+  width: auto;
+  display: block;
 }
 
-.brand-name span { color: var(--red); }
+.brand-name {
+  font-family: 'IBM Plex Sans Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  color: var(--ink-soft);
+  padding-left: 12px;
+  border-left: 1px solid var(--line);
+}
+
+.brand-name span { color: var(--ink-soft); }
 
 .updated-chip {
   font-size: 12px;
