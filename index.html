@@ -6,10 +6,10 @@
 <title>V4 · Ranking de Certificados</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
-<link rel="stylesheet" href="style.css?v=9" />
+<link rel="stylesheet" href="style.css?v=11" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="config.js?v=9"></script>
-<script src="common.js?v=10"></script>
+<script src="common.js?v=11"></script>
 </head>
 <body>
   <div class="topbar">
@@ -35,6 +35,13 @@
       </div>
 
       <div class="stat-strip" id="statsUnidades"></div>
+
+      <div class="tier-pills" id="tierPills">
+        <button class="tier-pill active" data-tier="pequena">Até 50 pessoas</button>
+        <button class="tier-pill" data-tier="media">50 a 100 pessoas</button>
+        <button class="tier-pill" data-tier="grande">Mais de 100 pessoas</button>
+      </div>
+
       <div class="podium" id="podiumUnidades"></div>
       <div class="rank-table" id="tableUnidades"></div>
     </section>
@@ -75,6 +82,17 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ---------- Tier pills (Aba 1) ----------
+let selectedTier = 'pequena';
+document.querySelectorAll('.tier-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tier-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedTier = btn.dataset.tier;
+    renderUnidades();
   });
 });
 
@@ -212,19 +230,22 @@ async function loadData() {
 }
 
 function renderUnidades() {
-  const elegiveis = unidadesRanking.filter(u => u.elegivelPodio);
+  const doFaixa = unidadesRanking.filter(u => u.tamanho.id === selectedTier);
+  const elegiveis = doFaixa.filter(u => u.elegivelPodio);
   const top3 = elegiveis.slice(0, 3);
   renderPodium('podiumUnidades', top3, 'unidade',
     u => fmtDec(u.media) + ' /investidor',
     u => `${fmtInt(u.certificados)} certificados · ${fmtInt(u.ativos)} investidores ativos`);
 
+  const tierLabels = { pequena: 'Até 50 pessoas', media: '50 a 100 pessoas', grande: 'Mais de 100 pessoas' };
+
   document.getElementById('statsUnidades').innerHTML = `
     <div class="stat-cell"><div class="num">${fmtInt(unidadesRanking.length)}</div><div class="lbl">Unidades participantes</div></div>
-    <div class="stat-cell"><div class="num">${fmtInt(allCertRows.length)}</div><div class="lbl">Certificados emitidos</div></div>
-    <div class="stat-cell"><div class="num">${top3[0] ? top3[0].nome : '—'}</div><div class="lbl">Unidade líder</div></div>
+    <div class="stat-cell"><div class="num">${fmtInt(doFaixa.length)}</div><div class="lbl">Unidades — ${tierLabels[selectedTier]}</div></div>
+    <div class="stat-cell"><div class="num">${top3[0] ? top3[0].nome : '—'}</div><div class="lbl">Líder da faixa</div></div>
   `;
 
-  renderTable('tableUnidades', unidadesRanking, 'unidade', {
+  renderTable('tableUnidades', doFaixa, 'unidade', {
     nameLabel: 'Unidade',
     col2Label: 'Ativos',
     col3Label: 'Total',
