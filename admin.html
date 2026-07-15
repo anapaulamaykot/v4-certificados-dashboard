@@ -3,587 +3,358 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>V4 · Painel de Upload — Certificados</title>
-<meta name="robots" content="noindex, nofollow" />
+<title>V4 · Ranking de Certificados</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
-<link rel="stylesheet" href="style.css?v=17" />
+<link rel="stylesheet" href="style.css?v=18" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="config.js?v=17"></script>
-<script src="common.js?v=17"></script>
-<style>
-  .admin-wrap { max-width: 640px; margin: 0 auto; padding: 60px 24px 100px; }
-  .drop-zone {
-    border: 2px dashed var(--line);
-    border-radius: 14px;
-    padding: 48px 24px;
-    text-align: center;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    background: var(--paper);
-  }
-  .drop-zone.hover, .drop-zone:hover { border-color: var(--red); background: var(--red-04); }
-  .drop-zone .icon { font-size: 30px; margin-bottom: 10px; }
-  .drop-zone .main-txt { font-weight: 600; font-size: 14.5px; }
-  .drop-zone .sub-txt { font-size: 12.5px; color: var(--ink-soft); margin-top: 4px; }
-  #fileInput { display: none; }
-  .log-box {
-    margin-top: 26px;
-    background: var(--paper);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 18px 20px;
-    font-size: 13px;
-    line-height: 1.7;
-    display: none;
-  }
-  .log-box.show { display: block; }
-  .log-line { display: flex; gap: 8px; align-items: baseline; }
-  .log-line .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); flex-shrink: 0; margin-top: 6px; }
-  .progress-track { height: 6px; background: var(--line); border-radius: 100px; overflow: hidden; margin-top: 14px; display: none; }
-  .progress-track.show { display: block; }
-  .progress-bar { height: 100%; width: 0%; background: var(--red); transition: width 0.2s; }
-  .result-card { margin-top: 22px; display: none; }
-  .result-card.show { display: block; }
-  .result-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-  .result-cell { background: var(--paper); padding: 16px; text-align: center; }
-  .result-cell .n { font-family: 'IBM Plex Sans Condensed', sans-serif; font-weight: 700; font-size: 24px; color: var(--red); }
-  .result-cell .l { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
-  a.view-link { display: inline-block; margin-top: 20px; font-size: 13.5px; font-weight: 600; color: var(--red); text-decoration: none; }
-  a.view-link:hover { text-decoration: underline; }
-
-  .incong-box {
-    margin-top: 26px;
-    background: var(--paper);
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 18px 20px;
-  }
-  .incong-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 10px 0;
-    border-top: 1px solid var(--line);
-    font-size: 13px;
-  }
-  .incong-row:first-child { border-top: none; }
-  .incong-info { flex: 1; }
-  .incong-info .n { font-weight: 600; }
-  .incong-info .d { color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
-  .incong-info .d b { color: var(--ink); font-weight: 600; }
-  .incong-fix-btn {
-    font-size: 12px;
-    font-weight: 600;
-    padding: 6px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--red);
-    background: var(--red-04);
-    color: var(--red);
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .incong-fix-btn:hover { background: var(--red); color: #fff; }
-
-  .override-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
-  .override-form input {
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 13.5px;
-    padding: 10px 14px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--paper);
-  }
-  .override-form input#overrideEmail { flex: 1; min-width: 220px; }
-  .override-form input#overrideFilial { flex: 2; min-width: 280px; }
-  .override-form button {
-    font-family: 'IBM Plex Sans Condensed', sans-serif;
-    font-weight: 600;
-    font-size: 13.5px;
-    padding: 10px 18px;
-    border-radius: 8px;
-    border: none;
-    background: var(--red);
-    color: #fff;
-    cursor: pointer;
-  }
-  .override-form button:hover { background: var(--red-deep); }
-
-  .override-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 10px 14px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    margin-bottom: 8px;
-    font-size: 13px;
-    background: var(--paper);
-  }
-  .override-item .txt { color: var(--ink-soft); }
-  .override-item .txt b { color: var(--ink); }
-  .override-remove {
-    font-size: 12px;
-    color: var(--ink-soft);
-    background: none;
-    border: none;
-    cursor: pointer;
-    text-decoration: underline;
-  }
-  .override-remove:hover { color: var(--red); }
-</style>
+<script src="config.js?v=18"></script>
+<script src="common.js?v=18"></script>
 </head>
 <body>
   <div class="topbar">
     <div class="brand">
       <img src="https://i.ibb.co/XxfLTD2L/logov4company.png" alt="V4 Company" class="brand-logo" />
-      <div class="brand-name"><span>Painel de Upload · Certificados</span></div>
+      <div class="brand-name"><span>Ranking de Certificados</span></div>
     </div>
+    <div class="updated-chip" id="updatedChip">Carregando...</div>
   </div>
 
-  <div class="admin-wrap">
-    <div class="eyebrow">Rotina diária</div>
-    <h2 style="font-size:24px; margin-top:6px;">Sincronizar planilha de certificados</h2>
-    <p style="color:var(--ink-soft); font-size:13.5px; margin-top:8px; line-height:1.6;">
-      Suba o Excel exportado do Growth Learning (Certificados por Usuário). O sistema substitui a base do dia
-      anterior pela lista atual e recalcula o ranking automaticamente. Cada linha do arquivo conta como 1 certificado.
-    </p>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="unidades">Ranking por Unidade</button>
+    <button class="tab-btn" data-tab="geral">Ranking Geral</button>
+    <button class="tab-btn" data-tab="investidores">Ranking por Investidor</button>
+  </div>
 
-    <div class="drop-zone" id="dropZone">
-      <div class="icon">📄</div>
-      <div class="main-txt">Clique ou arraste o arquivo aqui</div>
-      <div class="sub-txt">.xlsx ou .csv exportado do Growth Learning</div>
-    </div>
-    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" />
-
-    <div class="progress-track" id="progressTrack"><div class="progress-bar" id="progressBar"></div></div>
-
-    <div class="log-box" id="logBox"></div>
-
-    <div class="result-card" id="resultCard">
-      <div class="result-grid">
-        <div class="result-cell"><div class="n" id="rNew">–</div><div class="l">Total anterior</div></div>
-        <div class="result-cell"><div class="n" id="rUpdated">–</div><div class="l">Variação</div></div>
-        <div class="result-cell"><div class="n" id="rTotal">–</div><div class="l">Total agora</div></div>
+  <main>
+    <!-- ABA 1 — UNIDADES -->
+    <section class="tab-panel active" id="panel-unidades">
+      <div class="section-head">
+        <div class="eyebrow">Ranking por Unidade</div>
+        <h2>Quem mais capacita, por investidor</h2>
+        <p>Unidades com o maior número de certificados. Ranking ordenado pela média de certificados por investidor, atualizado diariamente.</p>
       </div>
-      <a class="view-link" href="index.html" target="_blank">Ver dashboard atualizado →</a>
-    </div>
 
-    <div id="incongruenciasBox" class="incong-box" style="display:none;">
-      <div class="eyebrow">Divergências encontradas</div>
-      <p style="color:var(--ink-soft); font-size:12.5px; margin:6px 0 14px;">
-        Essas pessoas têm uma unidade na base de ativos, mas os certificados delas apontam pra outra.
-        Se o certificado estiver certo, corrija abaixo — isso passa a valer sempre, até você mudar de novo.
-      </p>
-      <div id="incongruenciasList"></div>
-    </div>
+      <div class="stat-strip" id="statsUnidades"></div>
 
-    <hr style="border:none; border-top:1px solid var(--line); margin:56px 0 36px;" />
+      <div class="tier-pills" id="tierPills">
+        <button class="tier-pill active" data-tier="pequena">Até 50 pessoas</button>
+        <button class="tier-pill" data-tier="media">50 a 100 pessoas</button>
+        <button class="tier-pill" data-tier="grande">Mais de 100 pessoas</button>
+      </div>
 
-    <div class="eyebrow">Correção manual</div>
-    <h2 style="font-size:20px; margin-top:6px;">Corrigir unidade de uma pessoa</h2>
-    <p style="color:var(--ink-soft); font-size:13.5px; margin-top:8px; line-height:1.6;">
-      Use isso pra casos pontuais — a correção vale a partir da próxima sincronização e continua valendo até você remover ou trocar.
-    </p>
-    <div class="override-form">
-      <input type="email" id="overrideEmail" placeholder="e-mail@v4company.com" />
-      <input type="text" id="overrideFilial" placeholder="Nome correto da unidade (ex: V4 Company Kuri & Associados)" />
-      <button id="overrideSaveBtn">Salvar correção</button>
-    </div>
-    <div id="overrideMsg" style="font-size:12.5px; color:var(--ink-soft); margin-top:10px;"></div>
+      <div class="podium" id="podiumUnidades"></div>
+      <div class="rank-table" id="tableUnidades"></div>
+    </section>
 
-    <div style="margin-top:22px;">
-      <div class="eyebrow">Correções ativas</div>
-      <div id="overridesList" style="margin-top:10px;"></div>
-    </div>
+    <!-- ABA 2 — RANKING GERAL (todas as unidades juntas) -->
+    <section class="tab-panel" id="panel-geral">
+      <div class="section-head">
+        <div class="eyebrow">Todas as unidades</div>
+        <h2>Ranking Geral</h2>
+        <p>Todas as unidades juntas, sem separar por porte — útil pra visão consolidada, mas lembra que unidades muito diferentes em tamanho estão competindo lado a lado aqui.</p>
+      </div>
 
-    <hr style="border:none; border-top:1px solid var(--line); margin:56px 0 36px;" />
+      <div class="stat-strip" id="statsGeral"></div>
+      <div class="podium" id="podiumGeral"></div>
+      <div class="rank-table" id="tableGeral"></div>
+    </section>
 
-    <div class="eyebrow">Atualização pontual</div>
-    <h2 style="font-size:20px; margin-top:6px;">Base de investidores ativos</h2>
-    <p style="color:var(--ink-soft); font-size:13.5px; margin-top:8px; line-height:1.6;">
-      Essa lista não muda todo dia — suba de novo só quando tiver uma atualização real do quadro de ativos
-      por unidade. Ela é o denominador real do ranking proporcional (certificados ÷ investidores ativos).
-    </p>
+    <!-- ABA 2 — INVESTIDORES -->
+    <section class="tab-panel" id="panel-investidores">
+      <div class="section-head">
+        <div class="eyebrow">Ranking dos Investidores</div>
+        <h2>Quem mais se certificou</h2>
+        <p>Ranking individual de certificados emitidos. Use os filtros para olhar uma unidade, cargo ou pessoa específica.</p>
+      </div>
 
-    <div class="drop-zone" id="dropZoneAtivos" style="margin-top:16px;">
-      <div class="icon">👥</div>
-      <div class="main-txt">Clique ou arraste o arquivo de investidores ativos</div>
-      <div class="sub-txt">.csv exportado do Growth Learning (separado por ;)</div>
-    </div>
-    <input type="file" id="fileInputAtivos" accept=".csv" />
+      <div class="stat-strip" id="statsInvestidores"></div>
+      <div class="podium" id="podiumInvestidores"></div>
 
-    <div class="log-box" id="logBoxAtivos"></div>
-  </div>
+      <div class="filters">
+        <input type="text" id="searchInvestidor" placeholder="Buscar investidor..." />
+        <select id="filterUnidade"><option value="">Todas as unidades</option></select>
+        <select id="filterCargo"><option value="">Todos os cargos</option></select>
+      </div>
 
-<script>
-const dropZoneAtivos = document.getElementById('dropZoneAtivos');
-const fileInputAtivos = document.getElementById('fileInputAtivos');
-const logBoxAtivos = document.getElementById('logBoxAtivos');
-
-dropZoneAtivos.addEventListener('click', () => fileInputAtivos.click());
-dropZoneAtivos.addEventListener('dragover', (e) => { e.preventDefault(); dropZoneAtivos.classList.add('hover'); });
-dropZoneAtivos.addEventListener('dragleave', () => dropZoneAtivos.classList.remove('hover'));
-dropZoneAtivos.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropZoneAtivos.classList.remove('hover');
-  if (e.dataTransfer.files.length) handleFileAtivos(e.dataTransfer.files[0]);
-});
-fileInputAtivos.addEventListener('change', (e) => {
-  if (e.target.files.length) handleFileAtivos(e.target.files[0]);
-});
-
-function logAtivos(msg) {
-  logBoxAtivos.classList.add('show');
-  const line = document.createElement('div');
-  line.className = 'log-line';
-  line.innerHTML = `<span class="dot"></span><span>${msg}</span>`;
-  logBoxAtivos.appendChild(line);
-  logBoxAtivos.scrollTop = logBoxAtivos.scrollHeight;
-}
-
-async function handleFileAtivos(file) {
-  logBoxAtivos.innerHTML = '';
-  logAtivos(`Lendo <strong>${file.name}</strong>...`);
-
-  const text = await file.text();
-  const raw = parseSemicolonCSV(text);
-  logAtivos(`Encontradas ${raw.length} linhas.`);
-
-  const rowsRaw = raw.map(r => ({
-    id_usuario: String(r.id).trim(),
-    nome: r.name,
-    email: r.email,
-    cargo: r.cargo && r.cargo.trim() ? r.cargo.trim() : 'Não informado',
-    filial: r.filial && r.filial.trim() ? r.filial.trim() : 'Matriz / Sem Unidade',
-    ativo: String(r.active).toLowerCase() === 'true',
-    atualizado_em: new Date().toISOString(),
-  })).filter(r => r.id_usuario);
-
-  const antesFiltroEmail = rowsRaw.length;
-  const rowsEmailValido = rowsRaw.filter(r => r.email && r.email.toLowerCase().trim().endsWith('@v4company.com'));
-  const excluidosEmail = antesFiltroEmail - rowsEmailValido.length;
-  if (excluidosEmail > 0) {
-    logAtivos(`⚠️ ${excluidosEmail} pessoa(s) excluída(s) por não ter e-mail @v4company.com.`);
-  }
-
-  // O Postgres não aceita duas linhas com o mesmo ID no mesmo upsert
-  // ("ON CONFLICT DO UPDATE cannot affect row a second time") — dedupe
-  // mantendo a última ocorrência de cada ID.
-  const dedupMap = new Map();
-  rowsEmailValido.forEach(r => dedupMap.set(r.id_usuario, r));
-  const rows = Array.from(dedupMap.values());
-  const duplicatas = rowsEmailValido.length - rows.length;
-  if (duplicatas > 0) {
-    logAtivos(`⚠️ ${duplicatas} linha(s) duplicada(s) no arquivo (mesmo ID repetido) — mantida a última ocorrência de cada uma.`);
-  }
-
-  logAtivos('Limpando base anterior...');
-  await supa.from('investidores_ativos').delete().neq('id_usuario', '___none___');
-
-  const BATCH = 500;
-  for (let i = 0; i < rows.length; i += BATCH) {
-    const batch = rows.slice(i, i + BATCH);
-    const { error } = await supa.from('investidores_ativos').upsert(batch, { onConflict: 'id_usuario' });
-    if (error) { logAtivos(`⚠️ Erro: ${error.message}`); console.error(error); return; }
-    logAtivos(`${Math.min(i + BATCH, rows.length)}/${rows.length} sincronizados`);
-  }
-
-  const ativosCount = rows.filter(r => r.ativo).length;
-  logAtivos(`✅ Base atualizada — ${fmtInt(rows.length)} pessoas, ${fmtInt(ativosCount)} ativas.`);
-}
-</script>
+      <div class="rank-table" id="tableInvestidores"></div>
+    </section>
+  </main>
 
 <script>
 const supa = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-const dropZone = document.getElementById('dropZone');
-const fileInput = document.getElementById('fileInput');
-const logBox = document.getElementById('logBox');
-const progressTrack = document.getElementById('progressTrack');
-const progressBar = document.getElementById('progressBar');
-const resultCard = document.getElementById('resultCard');
+let allCertRows = [];
+let prevSnapshot = { unidade: new Map(), investidor: new Map() };
+let unidadesRanking = [];
+let investidoresRanking = [];
 
-dropZone.addEventListener('click', () => fileInput.click());
-dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('hover'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('hover'));
-dropZone.addEventListener('drop', (e) => {
-  e.preventDefault();
-  dropZone.classList.remove('hover');
-  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-});
-fileInput.addEventListener('change', (e) => {
-  if (e.target.files.length) handleFile(e.target.files[0]);
-});
-
-function log(msg) {
-  logBox.classList.add('show');
-  const line = document.createElement('div');
-  line.className = 'log-line';
-  line.innerHTML = `<span class="dot"></span><span>${msg}</span>`;
-  logBox.appendChild(line);
-  logBox.scrollTop = logBox.scrollHeight;
-}
-
-function setProgress(pct) {
-  progressTrack.classList.add('show');
-  progressBar.style.width = pct + '%';
-}
-
-const COLMAP = {
-  'ID do Usuário': 'id_usuario',
-  'Nome': 'nome',
-  'Email': 'email',
-  'Tipo do certificado': 'tipo_certificado',
-  'Nome do Conteúdo ou Missão': 'conteudo',
-  'Data de Emissão do Certificado': 'data_emissao',
-  'ID do Certificado': 'id_certificado',
-  'Carga Horária do Conteúdo ou da Missão': 'carga_horaria',
-  'CPF': 'cpf',
-  'Cargo': 'cargo',
-  'Data de admissão': 'data_admissao',
-  'Filial': 'filial',
-};
-
-async function handleFile(file) {
-  logBox.innerHTML = '';
-  resultCard.classList.remove('show');
-  log(`Lendo <strong>${file.name}</strong>...`);
-  setProgress(8);
-
-  const isCSV = file.name.toLowerCase().endsWith('.csv');
-  let wb;
-  if (isCSV) {
-    // Lê como texto (UTF-8 correto) em vez de binário — ler .csv como
-    // array binário quebra acentos (ã, é, ç), e isso corrompia o nome
-    // da coluna "Nome do Conteúdo ou Missão", zerando os certificados.
-    const text = await file.text();
-    wb = XLSX.read(text, { type: 'string' });
-  } else {
-    const buf = await file.arrayBuffer();
-    wb = XLSX.read(buf, { type: 'array', cellDates: false });
-  }
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rawUntrimmed = XLSX.utils.sheet_to_json(sheet, { defval: null });
-
-  // Normaliza espaços em branco nos nomes das colunas (algumas exportações
-  // vêm com espaço extra no cabeçalho, o que quebraria o mapeamento abaixo)
-  const raw = rawUntrimmed.map(r => {
-    const clean = {};
-    Object.keys(r).forEach(k => { clean[k.trim()] = r[k]; });
-    return clean;
+// ---------- Tabs ----------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
   });
+});
 
-  log(`Encontradas <strong>${raw.length}</strong> linhas. Mapeando colunas...`);
-  if (raw.length > 0) {
-    log(`Colunas detectadas: <span style="color:var(--ink-soft)">${Object.keys(raw[0]).join(', ')}</span>`);
-  }
-  setProgress(15);
+// ---------- Tier pills (Aba 1) ----------
+let selectedTier = 'pequena';
+document.querySelectorAll('.tier-pill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tier-pill').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedTier = btn.dataset.tier;
+    renderUnidades();
+  });
+});
 
-  const rows = raw.map((r) => {
-    const out = {};
-    for (const [colName, field] of Object.entries(COLMAP)) {
-      out[field] = r[colName] !== undefined ? r[colName] : null;
-    }
-    if (out.data_emissao) out.data_emissao = excelSerialToISODate(out.data_emissao) || out.data_emissao;
-    if (out.data_admissao) out.data_admissao = excelSerialToISODate(out.data_admissao) || out.data_admissao;
-    if (out.carga_horaria === '') out.carga_horaria = null;
-    if (out.id_usuario !== null && out.id_usuario !== undefined) out.id_usuario = String(out.id_usuario).trim();
-    if (!out.filial || !String(out.filial).trim()) out.filial = 'Matriz / Sem Unidade';
-    if (!out.cargo || !String(out.cargo).trim()) out.cargo = 'Não informado';
-    return out;
-  }).filter(r => (r.nome && String(r.nome).trim()) || (r.email && String(r.email).trim()));
+// ---------- Movement chip ----------
+function moveChip(entityName, tipo, currentPos) {
+  const prevMap = prevSnapshot[tipo];
+  if (!prevMap.has(entityName)) return `<span class="move-chip move-flat">novo</span>`;
+  const prevPos = prevMap.get(entityName);
+  const diff = prevPos - currentPos;
+  if (diff > 0) return `<span class="move-chip move-up">▲ subiu ${diff}</span>`;
+  if (diff < 0) return `<span class="move-chip move-down">▼ caiu ${Math.abs(diff)}</span>`;
+  return `<span class="move-chip move-flat">estável</span>`;
+}
 
-  const dropped = raw.length - rows.length;
-  if (dropped > 0) {
-    log(`⚠️ ${dropped} linha(s) ignorada(s) por não ter nome nem e-mail preenchido.`);
-  }
-  if (rows.length === 0) {
-    log(`⚠️ Nenhuma linha válida encontrada. Confira se o arquivo é o export "Certificados por Usuário" do Growth Learning.`);
+// ---------- Podium render ----------
+function renderPodium(containerId, top3, tipo, metricFn, subFn) {
+  const el = document.getElementById(containerId);
+  if (top3.length === 0) { el.innerHTML = ''; return; }
+  const sizes = { 1: 108, 2: 84, 3: 84 };
+  el.innerHTML = top3.map((item, idx) => {
+    const rank = idx + 1;
+    const size = sizes[rank];
+    return `
+      <div class="podium-slot rank-${rank}">
+        <div class="seal" style="width:${size}px;height:${size}px;">
+          ${sealSVG(rank, size, containerId)}
+          <div class="seal-num" style="font-size:${size * 0.32}px;">${rank}</div>
+        </div>
+        <div class="podium-name">${item.nome}</div>
+        <div class="podium-metric">${metricFn(item)}</div>
+        <div class="podium-sub">${subFn(item)}</div>
+        ${moveChip(item.nome, tipo, rank)}
+      </div>
+    `;
+  }).join('');
+}
+
+// ---------- Table render ----------
+function renderTable(containerId, list, tipo, opts) {
+  const el = document.getElementById(containerId);
+  if (list.length === 0) {
+    el.innerHTML = `<div class="empty-state">Nenhum resultado encontrado com esses filtros.</div>`;
     return;
   }
+  const head = `
+    <div class="rank-row head">
+      <span>#</span>
+      <span>${opts.nameLabel}</span>
+      <span class="col-invest">${opts.col2Label || ''}</span>
+      <span class="col-media">${opts.col3Label || ''}</span>
+      <span>${opts.metricLabel}</span>
+    </div>`;
+  const rows = list.map((item, idx) => {
+    const pos = idx + 1;
+    const expandItems = item[opts.expandField || 'certificadosNomes'];
+    const expandable = opts.expandable && expandItems && expandItems.length > 0;
+    const rowAttrs = expandable ? `class="rank-row expandable" data-idx="${idx}"` : `class="rank-row"`;
+    const detail = expandable ? `
+      <div class="rank-detail" id="${containerId}-detail-${idx}" style="display:none;">
+        <div class="rank-detail-chips">
+          ${expandItems.map(n => `<span class="cert-chip">${n}</span>`).join('')}
+        </div>
+      </div>` : '';
+    return `
+      <div ${rowAttrs}>
+        <span class="rank-pos ${pos <= 3 ? 'top3' : ''}">${pos}</span>
+        <span class="rank-name">${item.nome}${opts.metaFn ? `<span class="meta">${opts.metaFn(item)}</span>` : ''}</span>
+        <span class="col-invest">${opts.col2Fn ? opts.col2Fn(item) : ''}</span>
+        <span class="col-media">${opts.col3Fn ? opts.col3Fn(item) : ''}</span>
+        <span class="rank-metric">${opts.metricFn(item)}${expandable ? '<span class="expand-caret">▾</span>' : ''}</span>
+      </div>
+      ${detail}`;
+  }).join('');
+  el.innerHTML = head + rows;
 
-  const semConteudo = rows.filter(r => !r.conteudo || !String(r.conteudo).trim()).length;
-  if (semConteudo > rows.length * 0.3) {
-    log(`⚠️ ${semConteudo} de ${rows.length} linhas vieram sem "Nome do Conteúdo ou Missão" — confira se essa coluna existe no arquivo com esse nome exato.`);
+  if (opts.expandable) {
+    el.querySelectorAll('.rank-row.expandable').forEach(row => {
+      row.addEventListener('click', () => {
+        const idx = row.dataset.idx;
+        const detail = document.getElementById(`${containerId}-detail-${idx}`);
+        if (!detail) return;
+        const isOpen = detail.style.display !== 'none';
+        detail.style.display = isOpen ? 'none' : 'block';
+        row.classList.toggle('open', !isOpen);
+      });
+    });
   }
+}
 
-  // O export às vezes traz o MESMO certificado duplicado pra mesma pessoa
-  // (linha idêntica repetida) — isso não é "duas pessoas com nome igual",
-  // é erro de export, então aqui sim deduplicamos.
-  const seenPersonCert = new Set();
-  const rowsSemDuplicataExata = rows.filter(r => {
-    const email = (r.email || '').toLowerCase().trim();
-    const key = (email || (r.nome || '').toLowerCase().trim()) + '|' + (r.conteudo || '').toLowerCase().trim();
-    if (seenPersonCert.has(key)) return false;
-    seenPersonCert.add(key);
-    return true;
-  });
-  const duplicatasExatas = rows.length - rowsSemDuplicataExata.length;
-  if (duplicatasExatas > 0) {
-    log(`⚠️ ${duplicatasExatas} certificado(s) duplicado(s) no arquivo (mesma pessoa + mesmo certificado repetido) — removidos.`);
-  }
-
-  const { count: countBefore } = await supa.from('certificados').select('*', { count: 'exact', head: true });
-
-  log('Limpando base do dia anterior...');
-  const { error: delErr } = await supa.from('certificados').delete().gte('id', 0);
-  if (delErr) { log(`⚠️ Erro ao limpar base anterior: ${delErr.message}`); return; }
-
-  log('Enviando para o banco em lotes...');
-
-  const BATCH = 400;
-  let sent = 0;
-  for (let i = 0; i < rowsSemDuplicataExata.length; i += BATCH) {
-    const batch = rowsSemDuplicataExata.slice(i, i + BATCH);
-    const { error } = await supa.from('certificados').insert(batch);
-    if (error) {
-      log(`⚠️ Erro no lote ${i / BATCH + 1}: ${error.message}`);
-      console.error(error);
-      return;
-    }
-    sent += batch.length;
-    setProgress(20 + (sent / rowsSemDuplicataExata.length) * 50);
-    log(`Lote ${Math.ceil((i + 1) / BATCH)} de ${Math.ceil(rowsSemDuplicataExata.length / BATCH)} sincronizado (${sent}/${rowsSemDuplicataExata.length})`);
-  }
-
-  log('Recalculando ranking do dia...');
-  setProgress(80);
-
-  let allRows, ativosRows, overridesRows;
+// ---------- Load & compute ----------
+async function loadData() {
+  let rows, ativosRows, overridesRows;
   try {
-    allRows = await fetchAllRows(() => supa.from('certificados').select('id_usuario,nome,email,filial,cargo'));
+    rows = await fetchAllRows(() => supa.from('certificados').select('id_usuario,nome,email,filial,cargo,conteudo,data_emissao'));
     ativosRows = await fetchAllRows(() => supa.from('investidores_ativos').select('id_usuario,nome,email,filial,cargo,ativo').eq('ativo', true));
     overridesRows = await fetchAllRows(() => supa.from('filial_overrides').select('email,filial'));
   } catch (e) {
-    log(`⚠️ Erro ao ler base para recalcular ranking: ${e.message}`);
+    document.getElementById('updatedChip').textContent = 'Erro ao carregar dados';
+    console.error(e);
     return;
   }
+  allCertRows = rows;
+
   const activeIndex = buildActiveLookup(ativosRows, overridesRows);
 
-  const incongruencias = detectIncongruencias(allRows, activeIndex);
-  if (incongruencias.length > 0) {
-    log(`⚠️ ${incongruencias.length} pessoa(s) com unidade divergente entre a base de ativos e os certificados — veja a lista abaixo do resultado.`);
-  }
-
+  // último snapshot anterior a hoje, pra calcular variação
   const today = new Date().toISOString().slice(0, 10);
-  await supa.from('snapshots_ranking').delete().eq('data_snapshot', today);
+  let snapDates = [];
+  try {
+    snapDates = await fetchAllRows(() => supa.from('snapshots_ranking').select('data_snapshot').order('data_snapshot', { ascending: false }));
+  } catch (e) { console.error(e); }
 
-  const unidades = buildRankingUnidades(allRows, activeIndex);
-  const investidores = buildRankingInvestidores(allRows, activeIndex);
+  const uniqueDates = [...new Set((snapDates || []).map(r => r.data_snapshot))];
+  const priorDate = uniqueDates.find(d => d !== today);
 
-  const snapshotRows = [];
-  unidades.forEach((u, idx) => snapshotRows.push({
-    data_snapshot: today, tipo: 'unidade', nome_entidade: u.nome,
-    certificados_count: u.certificados, investidores_count: u.ativos,
-    media_por_investidor: u.media, posicao: idx + 1,
-  }));
-  investidores.forEach((inv, idx) => snapshotRows.push({
-    data_snapshot: today, tipo: 'investidor', nome_entidade: inv.nome,
-    certificados_count: inv.certificados, investidores_count: null,
-    media_por_investidor: null, posicao: idx + 1,
-  }));
-
-  for (let i = 0; i < snapshotRows.length; i += 500) {
-    const batch = snapshotRows.slice(i, i + 500);
-    const { error } = await supa.from('snapshots_ranking').insert(batch);
-    if (error) { log(`⚠️ Erro ao gravar ranking: ${error.message}`); return; }
+  if (priorDate) {
+    try {
+      const prevRows = await fetchAllRows(() => supa.from('snapshots_ranking').select('tipo,nome_entidade,posicao').eq('data_snapshot', priorDate));
+      (prevRows || []).forEach(r => {
+        prevSnapshot[r.tipo].set(r.nome_entidade, r.posicao);
+      });
+    } catch (e) { console.error(e); }
   }
 
-  setProgress(100);
-  log('✅ Sincronização concluída.');
+  unidadesRanking = buildRankingUnidades(allCertRows, activeIndex);
+  investidoresRanking = buildRankingInvestidores(allCertRows, activeIndex);
 
-  const totalDepois = allRows.length;
-  const diff = totalDepois - (countBefore || 0);
+  const latestDate = uniqueDates[0];
+  document.getElementById('updatedChip').textContent = latestDate
+    ? `Atualizado em ${new Date(latestDate + 'T00:00:00').toLocaleDateString('pt-BR')}`
+    : `${fmtInt(rows.length)} certificados na base`;
 
-  document.getElementById('rNew').textContent = fmtInt(countBefore || 0);
-  document.getElementById('rUpdated').textContent = (diff >= 0 ? '+' : '') + fmtInt(diff);
-  document.getElementById('rTotal').textContent = fmtInt(totalDepois);
-  resultCard.classList.add('show');
-
-  renderIncongruencias(incongruencias);
+  renderUnidades();
+  renderGeral();
+  renderInvestidoresTab();
+  populateFilters();
 }
 
-// ---------- Divergências entre ativos e certificados ----------
-function renderIncongruencias(list) {
-  const box = document.getElementById('incongruenciasBox');
-  const el = document.getElementById('incongruenciasList');
-  if (!list || list.length === 0) {
-    box.style.display = 'none';
-    return;
-  }
-  box.style.display = 'block';
-  el.innerHTML = list.map(p => `
-    <div class="incong-row">
-      <div class="incong-info">
-        <div class="n">${p.nome}</div>
-        <div class="d">${p.email} · ativos diz <b>${p.filialAtivos}</b>, certificado diz <b>${p.filialCertificado}</b></div>
-      </div>
-      <button class="incong-fix-btn" data-email="${p.email}" data-filial="${p.filialCertificado}">Usar unidade do certificado</button>
-    </div>
-  `).join('');
+function renderUnidades() {
+  const doFaixa = unidadesRanking.filter(u => u.tamanho.id === selectedTier);
+  const elegiveis = doFaixa.filter(u => u.elegivelPodio);
+  const top3 = elegiveis.slice(0, 3);
+  renderPodium('podiumUnidades', top3, 'unidade',
+    u => fmtDec(u.media) + ' /investidor',
+    u => `${fmtInt(u.certificados)} certificados · ${fmtInt(u.ativos)} investidores ativos`);
 
-  el.querySelectorAll('.incong-fix-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      btn.textContent = 'Salvando...';
-      btn.disabled = true;
-      await saveOverride(btn.dataset.email, btn.dataset.filial);
-      btn.textContent = '✓ Corrigido';
-    });
+  const tierLabels = { pequena: 'Até 50 pessoas', media: '50 a 100 pessoas', grande: 'Mais de 100 pessoas' };
+
+  document.getElementById('statsUnidades').innerHTML = `
+    <div class="stat-cell"><div class="num">${fmtInt(unidadesRanking.length)}</div><div class="lbl">Unidades participantes</div></div>
+    <div class="stat-cell"><div class="num">${fmtInt(doFaixa.length)}</div><div class="lbl">Unidades — ${tierLabels[selectedTier]}</div></div>
+    <div class="stat-cell"><div class="num">${top3[0] ? top3[0].nome : '—'}</div><div class="lbl">Líder da faixa</div></div>
+  `;
+
+  renderTable('tableUnidades', doFaixa, 'unidade', {
+    nameLabel: 'Unidade',
+    col2Label: 'Ativos',
+    col3Label: 'Total',
+    metricLabel: 'Média',
+    col2Fn: u => fmtInt(u.ativos),
+    col3Fn: u => fmtInt(u.certificados),
+    metricFn: u => fmtDec(u.media),
+    expandable: true,
+    expandField: 'pessoasCertificadas',
+  });
+
+  const note = document.getElementById('unidadesNote');
+  if (note) {
+    note.textContent = `Considera só investidores ativos hoje e os certificados que eles geraram. Só concorrem ao pódio unidades com ${MIN_ATIVOS_PODIO}+ ativos.`;
+  }
+}
+
+function renderGeral() {
+  const elegiveis = unidadesRanking.filter(u => u.elegivelPodio);
+  const top3 = elegiveis.slice(0, 3);
+  renderPodium('podiumGeral', top3, 'unidade',
+    u => fmtDec(u.media) + ' /investidor',
+    u => `${fmtInt(u.certificados)} certificados · ${fmtInt(u.ativos)} investidores ativos`);
+
+  document.getElementById('statsGeral').innerHTML = `
+    <div class="stat-cell"><div class="num">${fmtInt(unidadesRanking.length)}</div><div class="lbl">Unidades no total</div></div>
+    <div class="stat-cell"><div class="num">${fmtInt(allCertRows.length)}</div><div class="lbl">Certificados emitidos</div></div>
+    <div class="stat-cell"><div class="num">${top3[0] ? top3[0].nome : '—'}</div><div class="lbl">Unidade líder geral</div></div>
+  `;
+
+  renderTable('tableGeral', unidadesRanking, 'unidade', {
+    nameLabel: 'Unidade',
+    col2Label: 'Ativos',
+    col3Label: 'Total',
+    metricLabel: 'Média',
+    col2Fn: u => fmtInt(u.ativos),
+    col3Fn: u => fmtInt(u.certificados),
+    metricFn: u => fmtDec(u.media),
+    metaFn: u => u.tamanho.label,
+    expandable: true,
+    expandField: 'pessoasCertificadas',
   });
 }
 
-// ---------- Correções manuais (filial_overrides) ----------
-async function saveOverride(email, filial) {
-  email = (email || '').toLowerCase().trim();
-  filial = (filial || '').trim();
-  if (!email || !filial) return;
-  const { error } = await supa.from('filial_overrides').upsert(
-    { email, filial, atualizado_em: new Date().toISOString() },
-    { onConflict: 'email' }
-  );
-  if (error) {
-    document.getElementById('overrideMsg').textContent = `⚠️ Erro ao salvar: ${error.message}`;
-    return;
-  }
-  document.getElementById('overrideMsg').textContent = `✅ Correção salva para ${email}. Vale a partir da próxima sincronização.`;
-  loadOverridesList();
+function renderInvestidoresTab() {
+  applyInvestidorFilters();
 }
 
-async function loadOverridesList() {
-  const el = document.getElementById('overridesList');
-  const { data, error } = await supa.from('filial_overrides').select('email,filial').order('email');
-  if (error) { el.innerHTML = ''; return; }
-  if (!data || data.length === 0) {
-    el.innerHTML = `<div style="color:var(--ink-soft); font-size:12.5px;">Nenhuma correção manual cadastrada ainda.</div>`;
-    return;
-  }
-  el.innerHTML = data.map(o => `
-    <div class="override-item">
-      <span class="txt"><b>${o.email}</b> → ${o.filial}</span>
-      <button class="override-remove" data-email="${o.email}">remover</button>
-    </div>
-  `).join('');
-  el.querySelectorAll('.override-remove').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      await supa.from('filial_overrides').delete().eq('email', btn.dataset.email);
-      loadOverridesList();
-    });
+function populateFilters() {
+  const unidadeSel = document.getElementById('filterUnidade');
+  const cargoSel = document.getElementById('filterCargo');
+  const unidades = [...new Set(investidoresRanking.map(i => i.filial))].sort();
+  const cargos = [...new Set(investidoresRanking.map(i => i.cargo))].sort();
+  unidades.forEach(u => unidadeSel.insertAdjacentHTML('beforeend', `<option value="${u}">${u}</option>`));
+  cargos.forEach(c => cargoSel.insertAdjacentHTML('beforeend', `<option value="${c}">${c}</option>`));
+
+  document.getElementById('searchInvestidor').addEventListener('input', applyInvestidorFilters);
+  unidadeSel.addEventListener('change', applyInvestidorFilters);
+  cargoSel.addEventListener('change', applyInvestidorFilters);
+}
+
+function applyInvestidorFilters() {
+  const q = (document.getElementById('searchInvestidor')?.value || '').toLowerCase().trim();
+  const unidade = document.getElementById('filterUnidade')?.value || '';
+  const cargo = document.getElementById('filterCargo')?.value || '';
+
+  let filtered = investidoresRanking;
+  if (q) filtered = filtered.filter(i => i.nome.toLowerCase().includes(q));
+  if (unidade) filtered = filtered.filter(i => i.filial === unidade);
+  if (cargo) filtered = filtered.filter(i => i.cargo === cargo);
+
+  const top3 = (!q && !unidade && !cargo) ? investidoresRanking.slice(0, 3) : filtered.slice(0, 3);
+
+  renderPodium('podiumInvestidores', top3, 'investidor',
+    i => fmtInt(i.certificados) + ' certificados',
+    i => `${i.filial} · ${i.cargo}`);
+
+  document.getElementById('statsInvestidores').innerHTML = `
+    <div class="stat-cell"><div class="num">${fmtInt(investidoresRanking.length)}</div><div class="lbl">Investidores certificados</div></div>
+    <div class="stat-cell"><div class="num">${fmtInt(filtered.length)}</div><div class="lbl">Nesta visualização</div></div>
+    <div class="stat-cell"><div class="num">${top3[0] ? top3[0].nome.split(' ')[0] : '—'}</div><div class="lbl">Líder da visualização</div></div>
+  `;
+
+  renderTable('tableInvestidores', filtered, 'investidor', {
+    nameLabel: 'Investidor',
+    metaFn: i => `${i.filial} · ${i.cargo}${i.email ? ' · ' + i.email : ''}`,
+    metricLabel: 'Certificados',
+    metricFn: i => fmtInt(i.certificados),
+    expandable: true,
   });
 }
 
-document.getElementById('overrideSaveBtn').addEventListener('click', () => {
-  const email = document.getElementById('overrideEmail').value;
-  const filial = document.getElementById('overrideFilial').value;
-  saveOverride(email, filial);
-  document.getElementById('overrideEmail').value = '';
-  document.getElementById('overrideFilial').value = '';
-});
-
-loadOverridesList();
+loadData();
 </script>
 </body>
 </html>
