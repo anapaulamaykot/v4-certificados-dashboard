@@ -7,11 +7,11 @@
 <meta name="robots" content="noindex, nofollow" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
-<link rel="stylesheet" href="style.css?v=16" />
+<link rel="stylesheet" href="style.css?v=17" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="config.js?v=16"></script>
-<script src="common.js?v=16"></script>
+<script src="config.js?v=17"></script>
+<script src="common.js?v=17"></script>
 <style>
   .admin-wrap { max-width: 640px; margin: 0 auto; padding: 60px 24px 100px; }
   .drop-zone {
@@ -354,8 +354,18 @@ async function handleFile(file) {
   log(`Lendo <strong>${file.name}</strong>...`);
   setProgress(8);
 
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+  const isCSV = file.name.toLowerCase().endsWith('.csv');
+  let wb;
+  if (isCSV) {
+    // Lê como texto (UTF-8 correto) em vez de binário — ler .csv como
+    // array binário quebra acentos (ã, é, ç), e isso corrompia o nome
+    // da coluna "Nome do Conteúdo ou Missão", zerando os certificados.
+    const text = await file.text();
+    wb = XLSX.read(text, { type: 'string' });
+  } else {
+    const buf = await file.arrayBuffer();
+    wb = XLSX.read(buf, { type: 'array', cellDates: false });
+  }
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rawUntrimmed = XLSX.utils.sheet_to_json(sheet, { defval: null });
 
@@ -394,6 +404,11 @@ async function handleFile(file) {
   if (rows.length === 0) {
     log(`⚠️ Nenhuma linha válida encontrada. Confira se o arquivo é o export "Certificados por Usuário" do Growth Learning.`);
     return;
+  }
+
+  const semConteudo = rows.filter(r => !r.conteudo || !String(r.conteudo).trim()).length;
+  if (semConteudo > rows.length * 0.3) {
+    log(`⚠️ ${semConteudo} de ${rows.length} linhas vieram sem "Nome do Conteúdo ou Missão" — confira se essa coluna existe no arquivo com esse nome exato.`);
   }
 
   // O export às vezes traz o MESMO certificado duplicado pra mesma pessoa
