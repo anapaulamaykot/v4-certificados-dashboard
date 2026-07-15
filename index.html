@@ -6,10 +6,10 @@
 <title>V4 · Ranking de Certificados</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
-<link rel="stylesheet" href="style.css?v=8" />
+<link rel="stylesheet" href="style.css?v=9" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=8"></script>
-<script src="common.js?v=8"></script>
+<script src="config.js?v=9"></script>
+<script src="common.js?v=10"></script>
 </head>
 <body>
   <div class="topbar">
@@ -129,12 +129,13 @@ function renderTable(containerId, list, tipo, opts) {
     </div>`;
   const rows = list.map((item, idx) => {
     const pos = idx + 1;
-    const expandable = opts.expandable && item.certificadosNomes && item.certificadosNomes.length > 0;
+    const expandItems = item[opts.expandField || 'certificadosNomes'];
+    const expandable = opts.expandable && expandItems && expandItems.length > 0;
     const rowAttrs = expandable ? `class="rank-row expandable" data-idx="${idx}"` : `class="rank-row"`;
     const detail = expandable ? `
       <div class="rank-detail" id="${containerId}-detail-${idx}" style="display:none;">
         <div class="rank-detail-chips">
-          ${item.certificadosNomes.map(n => `<span class="cert-chip">${n}</span>`).join('')}
+          ${expandItems.map(n => `<span class="cert-chip">${n}</span>`).join('')}
         </div>
       </div>` : '';
     return `
@@ -231,6 +232,8 @@ function renderUnidades() {
     col2Fn: u => fmtInt(u.ativos),
     col3Fn: u => fmtInt(u.certificados),
     metricFn: u => fmtDec(u.media),
+    expandable: true,
+    expandField: 'pessoasCertificadas',
   });
 
   const note = document.getElementById('unidadesNote');
