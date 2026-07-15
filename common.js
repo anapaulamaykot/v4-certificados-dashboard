@@ -160,12 +160,20 @@ function resolveCanonicalFilial(raw, canonicalByKey) {
 // (e-mail funciona como respaldo quando o ID não bate entre as duas bases).
 // Também normaliza o nome da unidade de cada pessoa (grafias variantes
 // viram um único nome canônico; unidades sem "V4" em nenhuma grafia caem
-// em "Matriz / Sem Unidade").
+// em "Matriz / Sem Unidade"). overridesRows (opcional) tem prioridade
+// máxima: corrige manualmente a unidade de e-mails específicos.
 // Retorna { lookup, roster } — lookup resolve qualquer linha de certificado
 // à pessoa ativa correta; roster é a lista canônica de ativos (1 por pessoa).
-function buildActiveLookup(ativosRows) {
+function buildActiveLookup(ativosRows, overridesRows) {
   const rows = ativosRows || [];
-  const canonicalByKey = buildFilialCanonicalMap(rows.map(r => r.filial));
+  const overridesByEmail = new Map();
+  (overridesRows || []).forEach(o => {
+    const email = (o.email || '').toLowerCase().trim();
+    if (email) overridesByEmail.set(email, o.filial);
+  });
+
+  const allFilialNames = rows.map(r => r.filial).concat(Array.from(overridesByEmail.values()));
+  const canonicalByKey = buildFilialCanonicalMap(allFilialNames);
 
   const lookup = new Map();
   const roster = new Map(); // id canônico -> info
@@ -173,13 +181,46 @@ function buildActiveLookup(ativosRows) {
     const id = keyOf(r.id_usuario);
     const email = (r.email || '').toLowerCase().trim();
     const canonicalId = id || ('email:' + email);
-    const filial = resolveCanonicalFilial(r.filial, canonicalByKey) || 'Matriz / Sem Unidade';
-    const info = { id: canonicalId, nome: r.nome, filial, cargo: r.cargo, email: r.email };
+    const override = overridesByEmail.get(email);
+    const rawFilial = override || r.filial;
+    const filial = resolveCanonicalFilial(rawFilial, canonicalByKey) || 'Matriz / Sem Unidade';
+    const info = { id: canonicalId, nome: r.nome, filial, cargo: r.cargo, email: r.email, temOverride: !!override };
     if (id) lookup.set('id:' + id, info);
     if (email) lookup.set('email:' + email, info);
     roster.set(canonicalId, info);
   });
-  return { lookup, roster };
+  return { lookup, roster, canonicalByKey };
+}
+
+// Compara a Filial de cada linha de certificado com a Filial da pessoa na
+// base de ativos. Quando divergem (e não há correção manual aplicada),
+// isso é uma incongruência que vale revisar — pode ser a base de ativos
+// desatualizada, ou a planilha de certificados com Filial errada.
+function detectIncongruencias(certRows, activeIndex) {
+  const { lookup, canonicalByKey } = activeIndex;
+  const porPessoa = new Map();
+
+  certRows.forEach(r => {
+    const investor = resolveInvestor(r, lookup);
+    if (!investor || investor.temOverride) return;
+    const filialCert = resolveCanonicalFilial(r.filial, canonicalByKey);
+    if (!filialCert) return; // certificado sem filial reconhecível, nada a comparar
+    if (filialCert === investor.filial) return; // bate, sem problema
+
+    const key = investor.email || investor.id;
+    if (!porPessoa.has(key)) {
+      porPessoa.set(key, { nome: investor.nome, email: investor.email, filialAtivos: investor.filial, filiaisCertificado: new Map() });
+    }
+    const p = porPessoa.get(key);
+    p.filiaisCertificado.set(filialCert, (p.filiaisCertificado.get(filialCert) || 0) + 1);
+  });
+
+  return Array.from(porPessoa.values()).map(p => ({
+    nome: p.nome,
+    email: p.email,
+    filialAtivos: p.filialAtivos,
+    filialCertificado: Array.from(p.filiaisCertificado.entries()).sort((a, b) => b[1] - a[1])[0][0],
+  }));
 }
 
 // Resolve a qual investidor ativo uma linha de certificado pertence,
