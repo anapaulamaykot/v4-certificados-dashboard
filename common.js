@@ -38,21 +38,23 @@ function sealPath(cx, cy, r, wobble, points) {
   return d + 'Z';
 }
 
-function sealSVG(rank, size) {
+function sealSVG(rank, size, uid) {
+  const ns = uid || 'x';
   const tierColor = rank === 1 ? '#fb2e0a' : rank === 2 ? '#c74a34' : '#a8674f';
   const tierColorDeep = rank === 1 ? '#560303' : rank === 2 ? '#7a2418' : '#5c3527';
   const r = size / 2 - size * 0.06;
   const cx = size / 2, cy = size / 2;
   const path = sealPath(cx, cy, r, size * 0.045, 22);
+  const gradId = `sealGrad-${ns}-${rank}`;
   return `
     <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
       <defs>
-        <linearGradient id="sealGrad${rank}" x1="0" y1="0" x2="1" y2="1">
+        <linearGradient id="${gradId}" x1="0" y1="0" x2="1" y2="1">
           <stop offset="0%" stop-color="${tierColor}" />
           <stop offset="100%" stop-color="${tierColorDeep}" />
         </linearGradient>
       </defs>
-      <path d="${path}" fill="url(#sealGrad${rank})" />
+      <path d="${path}" fill="url(#${gradId})" />
       <circle cx="${cx}" cy="${cy}" r="${r * 0.72}" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.5" stroke-dasharray="2 3" />
     </svg>
   `;
