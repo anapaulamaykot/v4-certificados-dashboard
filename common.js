@@ -183,7 +183,9 @@ function buildActiveLookup(ativosRows, overridesRows) {
     const canonicalId = id || ('email:' + email);
     const override = overridesByEmail.get(email);
     const rawFilial = override || r.filial;
-    const filial = resolveCanonicalFilial(rawFilial, canonicalByKey) || 'Matriz / Sem Unidade';
+    // Sem grafia reconhecível de unidade -> filial fica null (pessoa é
+    // excluída do Ranking por Unidade, mas continua valendo no de Investidores).
+    const filial = resolveCanonicalFilial(rawFilial, canonicalByKey);
     const info = { id: canonicalId, nome: r.nome, filial, cargo: r.cargo, email: r.email, temOverride: !!override };
     if (id) lookup.set('id:' + id, info);
     if (email) lookup.set('email:' + email, info);
@@ -257,6 +259,7 @@ function buildRankingUnidades(certRows, activeIndex) {
   };
 
   for (const [id, info] of roster.entries()) {
+    if (!info.filial) continue; // sem unidade válida -> fora do Ranking por Unidade
     const filial = normFilial(info.filial);
     if (!byFilial.has(filial)) byFilial.set(filial, { certificados: 0, comCertificado: new Map(), ativos: new Set() });
     byFilial.get(filial).ativos.add(id);
@@ -264,7 +267,7 @@ function buildRankingUnidades(certRows, activeIndex) {
 
   for (const r of certRows) {
     const investor = resolveInvestor(r, lookup);
-    if (!investor) continue;
+    if (!investor || !investor.filial) continue;
     const filial = normFilial(investor.filial);
     const entry = byFilial.get(filial);
     entry.certificados += 1;
@@ -306,7 +309,7 @@ function buildRankingInvestidores(certRows, activeIndex) {
   for (const [id, info] of roster.entries()) {
     byUser.set(id, {
       nome: info.nome || id,
-      filial: info.filial && info.filial.trim() ? info.filial.trim() : 'Matriz / Sem Unidade',
+      filial: info.filial || 'Sem Unidade',
       cargo: info.cargo && info.cargo.trim() ? info.cargo.trim() : 'Não informado',
       email: info.email || '',
       certificados: 0,
