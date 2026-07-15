@@ -164,7 +164,7 @@ function buildRankingUnidades(certRows, activeIndex) {
       elegivelPodio: ativos >= MIN_ATIVOS_PODIO,
     });
   }
-  list.sort((a, b) => b.media - a.media || b.certificados - a.certificados);
+  list.sort((a, b) => b.media - a.media || b.engajamento - a.engajamento);
   return list;
 }
 
