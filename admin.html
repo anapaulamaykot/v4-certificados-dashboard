@@ -7,11 +7,11 @@
 <meta name="robots" content="noindex, nofollow" />
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
-<link rel="stylesheet" href="style.css?v=9" />
+<link rel="stylesheet" href="style.css?v=13" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="config.js?v=9"></script>
-<script src="common.js?v=10"></script>
+<script src="config.js?v=13"></script>
+<script src="common.js?v=13"></script>
 <style>
   .admin-wrap { max-width: 640px; margin: 0 auto; padding: 60px 24px 100px; }
   .drop-zone {
@@ -52,6 +52,88 @@
   .result-cell .l { font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
   a.view-link { display: inline-block; margin-top: 20px; font-size: 13.5px; font-weight: 600; color: var(--red); text-decoration: none; }
   a.view-link:hover { text-decoration: underline; }
+
+  .incong-box {
+    margin-top: 26px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+  .incong-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 0;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+  }
+  .incong-row:first-child { border-top: none; }
+  .incong-info { flex: 1; }
+  .incong-info .n { font-weight: 600; }
+  .incong-info .d { color: var(--ink-soft); font-size: 12px; margin-top: 2px; }
+  .incong-info .d b { color: var(--ink); font-weight: 600; }
+  .incong-fix-btn {
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--red);
+    background: var(--red-04);
+    color: var(--red);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .incong-fix-btn:hover { background: var(--red); color: #fff; }
+
+  .override-form { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+  .override-form input {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13.5px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--paper);
+  }
+  .override-form input#overrideEmail { flex: 1; min-width: 220px; }
+  .override-form input#overrideFilial { flex: 2; min-width: 280px; }
+  .override-form button {
+    font-family: 'IBM Plex Sans Condensed', sans-serif;
+    font-weight: 600;
+    font-size: 13.5px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: none;
+    background: var(--red);
+    color: #fff;
+    cursor: pointer;
+  }
+  .override-form button:hover { background: var(--red-deep); }
+
+  .override-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    background: var(--paper);
+  }
+  .override-item .txt { color: var(--ink-soft); }
+  .override-item .txt b { color: var(--ink); }
+  .override-remove {
+    font-size: 12px;
+    color: var(--ink-soft);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .override-remove:hover { color: var(--red); }
 </style>
 </head>
 <body>
@@ -88,6 +170,34 @@
         <div class="result-cell"><div class="n" id="rTotal">–</div><div class="l">Total agora</div></div>
       </div>
       <a class="view-link" href="index.html" target="_blank">Ver dashboard atualizado →</a>
+    </div>
+
+    <div id="incongruenciasBox" class="incong-box" style="display:none;">
+      <div class="eyebrow">Divergências encontradas</div>
+      <p style="color:var(--ink-soft); font-size:12.5px; margin:6px 0 14px;">
+        Essas pessoas têm uma unidade na base de ativos, mas os certificados delas apontam pra outra.
+        Se o certificado estiver certo, corrija abaixo — isso passa a valer sempre, até você mudar de novo.
+      </p>
+      <div id="incongruenciasList"></div>
+    </div>
+
+    <hr style="border:none; border-top:1px solid var(--line); margin:56px 0 36px;" />
+
+    <div class="eyebrow">Correção manual</div>
+    <h2 style="font-size:20px; margin-top:6px;">Corrigir unidade de uma pessoa</h2>
+    <p style="color:var(--ink-soft); font-size:13.5px; margin-top:8px; line-height:1.6;">
+      Use isso pra casos pontuais — a correção vale a partir da próxima sincronização e continua valendo até você remover ou trocar.
+    </p>
+    <div class="override-form">
+      <input type="email" id="overrideEmail" placeholder="e-mail@v4company.com" />
+      <input type="text" id="overrideFilial" placeholder="Nome correto da unidade (ex: V4 Company Kuri & Associados)" />
+      <button id="overrideSaveBtn">Salvar correção</button>
+    </div>
+    <div id="overrideMsg" style="font-size:12.5px; color:var(--ink-soft); margin-top:10px;"></div>
+
+    <div style="margin-top:22px;">
+      <div class="eyebrow">Correções ativas</div>
+      <div id="overridesList" style="margin-top:10px;"></div>
     </div>
 
     <hr style="border:none; border-top:1px solid var(--line); margin:56px 0 36px;" />
@@ -312,15 +422,21 @@ async function handleFile(file) {
   log('Recalculando ranking do dia...');
   setProgress(80);
 
-  let allRows, ativosRows;
+  let allRows, ativosRows, overridesRows;
   try {
     allRows = await fetchAllRows(() => supa.from('certificados').select('id_usuario,nome,email,filial,cargo'));
     ativosRows = await fetchAllRows(() => supa.from('investidores_ativos').select('id_usuario,nome,email,filial,cargo,ativo').eq('ativo', true));
+    overridesRows = await fetchAllRows(() => supa.from('filial_overrides').select('email,filial'));
   } catch (e) {
     log(`⚠️ Erro ao ler base para recalcular ranking: ${e.message}`);
     return;
   }
-  const activeIndex = buildActiveLookup(ativosRows);
+  const activeIndex = buildActiveLookup(ativosRows, overridesRows);
+
+  const incongruencias = detectIncongruencias(allRows, activeIndex);
+  if (incongruencias.length > 0) {
+    log(`⚠️ ${incongruencias.length} pessoa(s) com unidade divergente entre a base de ativos e os certificados — veja a lista abaixo do resultado.`);
+  }
 
   const today = new Date().toISOString().slice(0, 10);
   await supa.from('snapshots_ranking').delete().eq('data_snapshot', today);
@@ -356,7 +472,87 @@ async function handleFile(file) {
   document.getElementById('rUpdated').textContent = (diff >= 0 ? '+' : '') + fmtInt(diff);
   document.getElementById('rTotal').textContent = fmtInt(totalDepois);
   resultCard.classList.add('show');
+
+  renderIncongruencias(incongruencias);
 }
+
+// ---------- Divergências entre ativos e certificados ----------
+function renderIncongruencias(list) {
+  const box = document.getElementById('incongruenciasBox');
+  const el = document.getElementById('incongruenciasList');
+  if (!list || list.length === 0) {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = 'block';
+  el.innerHTML = list.map(p => `
+    <div class="incong-row">
+      <div class="incong-info">
+        <div class="n">${p.nome}</div>
+        <div class="d">${p.email} · ativos diz <b>${p.filialAtivos}</b>, certificado diz <b>${p.filialCertificado}</b></div>
+      </div>
+      <button class="incong-fix-btn" data-email="${p.email}" data-filial="${p.filialCertificado}">Usar unidade do certificado</button>
+    </div>
+  `).join('');
+
+  el.querySelectorAll('.incong-fix-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.textContent = 'Salvando...';
+      btn.disabled = true;
+      await saveOverride(btn.dataset.email, btn.dataset.filial);
+      btn.textContent = '✓ Corrigido';
+    });
+  });
+}
+
+// ---------- Correções manuais (filial_overrides) ----------
+async function saveOverride(email, filial) {
+  email = (email || '').toLowerCase().trim();
+  filial = (filial || '').trim();
+  if (!email || !filial) return;
+  const { error } = await supa.from('filial_overrides').upsert(
+    { email, filial, atualizado_em: new Date().toISOString() },
+    { onConflict: 'email' }
+  );
+  if (error) {
+    document.getElementById('overrideMsg').textContent = `⚠️ Erro ao salvar: ${error.message}`;
+    return;
+  }
+  document.getElementById('overrideMsg').textContent = `✅ Correção salva para ${email}. Vale a partir da próxima sincronização.`;
+  loadOverridesList();
+}
+
+async function loadOverridesList() {
+  const el = document.getElementById('overridesList');
+  const { data, error } = await supa.from('filial_overrides').select('email,filial').order('email');
+  if (error) { el.innerHTML = ''; return; }
+  if (!data || data.length === 0) {
+    el.innerHTML = `<div style="color:var(--ink-soft); font-size:12.5px;">Nenhuma correção manual cadastrada ainda.</div>`;
+    return;
+  }
+  el.innerHTML = data.map(o => `
+    <div class="override-item">
+      <span class="txt"><b>${o.email}</b> → ${o.filial}</span>
+      <button class="override-remove" data-email="${o.email}">remover</button>
+    </div>
+  `).join('');
+  el.querySelectorAll('.override-remove').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await supa.from('filial_overrides').delete().eq('email', btn.dataset.email);
+      loadOverridesList();
+    });
+  });
+}
+
+document.getElementById('overrideSaveBtn').addEventListener('click', () => {
+  const email = document.getElementById('overrideEmail').value;
+  const filial = document.getElementById('overrideFilial').value;
+  saveOverride(email, filial);
+  document.getElementById('overrideEmail').value = '';
+  document.getElementById('overrideFilial').value = '';
+});
+
+loadOverridesList();
 </script>
 </body>
 </html>
