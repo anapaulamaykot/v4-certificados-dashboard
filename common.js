@@ -196,6 +196,15 @@ function resolveInvestor(row, lookup) {
 // tanto o denominador (quantos ativos tem a unidade) quanto o numerador
 // (quantos certificados eles geraram) vêm exclusivamente de quem está ativo hoje.
 // Cada linha do arquivo de certificados vale 1, independente de ter ID preenchido.
+// Classifica a unidade por porte (nº de investidores ativos), pra competir
+// só dentro da própria faixa — não faz sentido uma unidade de 5 pessoas
+// disputar com uma de 300.
+function getTamanhoTier(ativos) {
+  if (ativos <= 50) return { id: 'pequena', label: 'Até 50 pessoas' };
+  if (ativos <= 100) return { id: 'media', label: '50 a 100 pessoas' };
+  return { id: 'grande', label: 'Mais de 100 pessoas' };
+}
+
 function buildRankingUnidades(certRows, activeIndex) {
   const { lookup, roster } = activeIndex || { lookup: new Map(), roster: new Map() };
   const byFilial = new Map();
@@ -239,6 +248,7 @@ function buildRankingUnidades(certRows, activeIndex) {
       engajamento,
       elegivelPodio: ativos >= MIN_ATIVOS_PODIO,
       pessoasCertificadas,
+      tamanho: getTamanhoTier(ativos),
     });
   }
   list.sort((a, b) => b.media - a.media || b.engajamento - a.engajamento);
