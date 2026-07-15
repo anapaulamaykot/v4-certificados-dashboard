@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>V4 · Painel de Upload — Certificados</title>
 <meta name="robots" content="noindex, nofollow" />
-<link rel="stylesheet" href="style.css?v=4" />
+<link rel="stylesheet" href="style.css?v=6" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-<script src="config.js?v=4"></script>
-<script src="common.js?v=4"></script>
+<script src="config.js?v=6"></script>
+<script src="common.js?v=6"></script>
 <style>
   .admin-wrap { max-width: 640px; margin: 0 auto; padding: 60px 24px 100px; }
   .drop-zone {
@@ -64,8 +64,8 @@
     <div class="eyebrow">Rotina diária</div>
     <h2 style="font-size:24px; margin-top:6px;">Sincronizar planilha de certificados</h2>
     <p style="color:var(--ink-soft); font-size:13.5px; margin-top:8px; line-height:1.6;">
-      Suba o Excel exportado do Growth Learning (Certificados por Usuário). O sistema atualiza os certificados
-      novos, ignora os que já existem e recalcula o ranking do dia automaticamente.
+      Suba o Excel exportado do Growth Learning (Certificados por Usuário). O sistema substitui a base do dia
+      anterior pela lista atual e recalcula o ranking automaticamente. Cada linha do arquivo conta como 1 certificado.
     </p>
 
     <div class="drop-zone" id="dropZone">
@@ -81,9 +81,9 @@
 
     <div class="result-card" id="resultCard">
       <div class="result-grid">
-        <div class="result-cell"><div class="n" id="rNew">–</div><div class="l">Certificados novos</div></div>
-        <div class="result-cell"><div class="n" id="rUpdated">–</div><div class="l">Já existiam</div></div>
-        <div class="result-cell"><div class="n" id="rTotal">–</div><div class="l">Total na base</div></div>
+        <div class="result-cell"><div class="n" id="rNew">–</div><div class="l">Total anterior</div></div>
+        <div class="result-cell"><div class="n" id="rUpdated">–</div><div class="l">Variação</div></div>
+        <div class="result-cell"><div class="n" id="rTotal">–</div><div class="l">Total agora</div></div>
       </div>
       <a class="view-link" href="index.html" target="_blank">Ver dashboard atualizado →</a>
     </div>
@@ -141,7 +141,7 @@ async function handleFileAtivos(file) {
   const raw = parseSemicolonCSV(text);
   logAtivos(`Encontradas ${raw.length} linhas.`);
 
-  const rows = raw.map(r => ({
+  const rowsRaw = raw.map(r => ({
     id_usuario: String(r.id).trim(),
     nome: r.name,
     email: r.email,
@@ -150,6 +150,17 @@ async function handleFileAtivos(file) {
     ativo: String(r.active).toLowerCase() === 'true',
     atualizado_em: new Date().toISOString(),
   })).filter(r => r.id_usuario);
+
+  // O Postgres não aceita duas linhas com o mesmo ID no mesmo upsert
+  // ("ON CONFLICT DO UPDATE cannot affect row a second time") — dedupe
+  // mantendo a última ocorrência de cada ID.
+  const dedupMap = new Map();
+  rowsRaw.forEach(r => dedupMap.set(r.id_usuario, r));
+  const rows = Array.from(dedupMap.values());
+  const duplicatas = rowsRaw.length - rows.length;
+  if (duplicatas > 0) {
+    logAtivos(`⚠️ ${duplicatas} linha(s) duplicada(s) no arquivo (mesmo ID repetido) — mantida a última ocorrência de cada uma.`);
+  }
 
   logAtivos('Limpando base anterior...');
   await supa.from('investidores_ativos').delete().neq('id_usuario', '___none___');
@@ -227,12 +238,21 @@ async function handleFile(file) {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: 'array', cellDates: false });
   const sheet = wb.Sheets[wb.SheetNames[0]];
-  const raw = XLSX.utils.sheet_to_json(sheet, { defval: null });
+  const rawUntrimmed = XLSX.utils.sheet_to_json(sheet, { defval: null });
+
+  // Normaliza espaços em branco nos nomes das colunas (algumas exportações
+  // vêm com espaço extra no cabeçalho, o que quebraria o mapeamento abaixo)
+  const raw = rawUntrimmed.map(r => {
+    const clean = {};
+    Object.keys(r).forEach(k => { clean[k.trim()] = r[k]; });
+    return clean;
+  });
 
   log(`Encontradas <strong>${raw.length}</strong> linhas. Mapeando colunas...`);
+  if (raw.length > 0) {
+    log(`Colunas detectadas: <span style="color:var(--ink-soft)">${Object.keys(raw[0]).join(', ')}</span>`);
+  }
   setProgress(15);
-
-  const { count: countBefore } = await supa.from('certificados').select('*', { count: 'exact', head: true });
 
   const rows = raw.map((r) => {
     const out = {};
@@ -245,17 +265,31 @@ async function handleFile(file) {
     if (out.id_usuario !== null && out.id_usuario !== undefined) out.id_usuario = String(out.id_usuario).trim();
     if (!out.filial || !String(out.filial).trim()) out.filial = 'Matriz / Sem Unidade';
     if (!out.cargo || !String(out.cargo).trim()) out.cargo = 'Não informado';
-    out.atualizado_em = new Date().toISOString();
     return out;
-  }).filter(r => r.id_certificado);
+  }).filter(r => (r.nome && String(r.nome).trim()) || (r.email && String(r.email).trim()));
 
-  log(`Enviando para o banco em lotes...`);
+  const dropped = raw.length - rows.length;
+  if (dropped > 0) {
+    log(`⚠️ ${dropped} linha(s) ignorada(s) por não ter nome nem e-mail preenchido.`);
+  }
+  if (rows.length === 0) {
+    log(`⚠️ Nenhuma linha válida encontrada. Confira se o arquivo é o export "Certificados por Usuário" do Growth Learning.`);
+    return;
+  }
+
+  const { count: countBefore } = await supa.from('certificados').select('*', { count: 'exact', head: true });
+
+  log('Limpando base do dia anterior...');
+  const { error: delErr } = await supa.from('certificados').delete().gte('id', 0);
+  if (delErr) { log(`⚠️ Erro ao limpar base anterior: ${delErr.message}`); return; }
+
+  log('Enviando para o banco em lotes...');
 
   const BATCH = 400;
   let sent = 0;
   for (let i = 0; i < rows.length; i += BATCH) {
     const batch = rows.slice(i, i + BATCH);
-    const { error } = await supa.from('certificados').upsert(batch, { onConflict: 'id_certificado' });
+    const { error } = await supa.from('certificados').insert(batch);
     if (error) {
       log(`⚠️ Erro no lote ${i / BATCH + 1}: ${error.message}`);
       console.error(error);
@@ -269,19 +303,21 @@ async function handleFile(file) {
   log('Recalculando ranking do dia...');
   setProgress(80);
 
-  const { data: allRows, error: fetchErr } = await supa.from('certificados').select('id_usuario,nome,filial,cargo');
-  if (fetchErr) { log(`⚠️ Erro ao ler base: ${fetchErr.message}`); return; }
-
-  const { data: ativosRows, error: ativosErr } = await supa.from('investidores_ativos').select('id_usuario,nome,filial,cargo,ativo').eq('ativo', true);
-  if (ativosErr) { log(`⚠️ Erro ao ler base de ativos: ${ativosErr.message}`); return; }
-  const activeInvestorsMap = new Map();
-  (ativosRows || []).forEach(r => activeInvestorsMap.set(String(r.id_usuario).trim(), { nome: r.nome, filial: r.filial, cargo: r.cargo }));
+  let allRows, ativosRows;
+  try {
+    allRows = await fetchAllRows(() => supa.from('certificados').select('id_usuario,nome,email,filial,cargo'));
+    ativosRows = await fetchAllRows(() => supa.from('investidores_ativos').select('id_usuario,nome,email,filial,cargo,ativo').eq('ativo', true));
+  } catch (e) {
+    log(`⚠️ Erro ao ler base para recalcular ranking: ${e.message}`);
+    return;
+  }
+  const activeIndex = buildActiveLookup(ativosRows);
 
   const today = new Date().toISOString().slice(0, 10);
   await supa.from('snapshots_ranking').delete().eq('data_snapshot', today);
 
-  const unidades = buildRankingUnidades(allRows, activeInvestorsMap);
-  const investidores = buildRankingInvestidores(allRows, activeInvestorsMap);
+  const unidades = buildRankingUnidades(allRows, activeIndex);
+  const investidores = buildRankingInvestidores(allRows, activeIndex);
 
   const snapshotRows = [];
   unidades.forEach((u, idx) => snapshotRows.push({
@@ -305,11 +341,10 @@ async function handleFile(file) {
   log('✅ Sincronização concluída.');
 
   const totalDepois = allRows.length;
-  const novos = Math.max(0, totalDepois - (countBefore || 0));
-  const jaExistiam = Math.max(0, rows.length - novos);
+  const diff = totalDepois - (countBefore || 0);
 
-  document.getElementById('rNew').textContent = fmtInt(novos);
-  document.getElementById('rUpdated').textContent = fmtInt(jaExistiam);
+  document.getElementById('rNew').textContent = fmtInt(countBefore || 0);
+  document.getElementById('rUpdated').textContent = (diff >= 0 ? '+' : '') + fmtInt(diff);
   document.getElementById('rTotal').textContent = fmtInt(totalDepois);
   resultCard.classList.add('show');
 }
