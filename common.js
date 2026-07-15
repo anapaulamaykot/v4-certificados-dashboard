@@ -90,18 +90,91 @@ async function fetchAllRows(queryBuilderFn, pageSize) {
   return all;
 }
 
+// --- Normalização de nomes de unidade -----------------------------------
+// Junta variações de grafia da mesma unidade (V4_Lab / V4 Lab, Kuri & Co /
+// Kuri&Co - Franchise Store, etc.) e só aceita como unidade válida quem
+// tiver "V4" em pelo menos uma das grafias encontradas.
+
+function stripAccents(s) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+const FILIAL_STOPWORDS = new Set([
+  'v4', 'company', 'associados', 'associado', 'assoc', 'co', 'ltda', 'franchise', 'store', 'e',
+]);
+
+// Reduz um nome de unidade ao seu "núcleo" comparável, ignorando prefixos/
+// sufixos corporativos, pontuação, acentos e maiúsculas/minúsculas.
+function normalizeFilialKey(raw) {
+  if (!raw) return '';
+  let s = stripAccents(String(raw).toLowerCase());
+  s = s.replace(/&/g, ' e ');
+  s = s.replace(/[_\-.,]/g, ' ');
+  s = s.replace(/[^a-z0-9\s]/g, ' ');
+  const words = s.split(/\s+/).filter(w => w && !FILIAL_STOPWORDS.has(w));
+  return words.join(' ').trim();
+}
+
+// Unidades legítimas que não têm "V4" no nome, mas são reais mesmo assim —
+// adicionadas manualmente como exceção à regra.
+const FILIAL_EXCECOES_SEM_V4 = [
+  'ROSOLEM VERONEZE & CORDEIRO ASSESSORIA DE MARKETING LTDA',
+];
+const FILIAL_EXCECOES_KEYS = new Set(FILIAL_EXCECOES_SEM_V4.map(normalizeFilialKey));
+
+// A partir de todas as grafias brutas encontradas, monta o mapa
+// núcleo -> { canonical, hasV4 }. Só vira unidade válida quem tiver "v4"
+// em pelo menos uma grafia do grupo (ou estiver na lista de exceções).
+function buildFilialCanonicalMap(rawNames) {
+  const groups = new Map();
+  rawNames.forEach(raw => {
+    const key = normalizeFilialKey(raw);
+    if (!key) return;
+    if (!groups.has(key)) groups.set(key, new Map());
+    const variants = groups.get(key);
+    variants.set(raw, (variants.get(raw) || 0) + 1);
+  });
+
+  const canonicalByKey = new Map();
+  groups.forEach((variants, key) => {
+    const entries = Array.from(variants.entries());
+    const v4Entries = entries.filter(([v]) => /v4/i.test(v));
+    const hasV4 = v4Entries.length > 0 || FILIAL_EXCECOES_KEYS.has(key);
+    const pool = v4Entries.length ? v4Entries : entries;
+    pool.sort((a, b) => b[1] - a[1] || b[0].length - a[0].length);
+    canonicalByKey.set(key, { canonical: pool[0][0], hasV4 });
+  });
+  return canonicalByKey;
+}
+
+// Resolve o nome canônico de uma unidade, ou null se o grupo inteiro
+// nunca teve "V4" em nenhuma grafia (nesse caso, cai em Matriz/Sem Unidade).
+function resolveCanonicalFilial(raw, canonicalByKey) {
+  const key = normalizeFilialKey(raw);
+  const entry = canonicalByKey.get(key);
+  if (entry && entry.hasV4) return entry.canonical;
+  return null;
+}
+
 // Constrói um índice de busca de investidores ativos por ID e por e-mail
 // (e-mail funciona como respaldo quando o ID não bate entre as duas bases).
+// Também normaliza o nome da unidade de cada pessoa (grafias variantes
+// viram um único nome canônico; unidades sem "V4" em nenhuma grafia caem
+// em "Matriz / Sem Unidade").
 // Retorna { lookup, roster } — lookup resolve qualquer linha de certificado
 // à pessoa ativa correta; roster é a lista canônica de ativos (1 por pessoa).
 function buildActiveLookup(ativosRows) {
+  const rows = ativosRows || [];
+  const canonicalByKey = buildFilialCanonicalMap(rows.map(r => r.filial));
+
   const lookup = new Map();
   const roster = new Map(); // id canônico -> info
-  (ativosRows || []).forEach(r => {
+  rows.forEach(r => {
     const id = keyOf(r.id_usuario);
     const email = (r.email || '').toLowerCase().trim();
     const canonicalId = id || ('email:' + email);
-    const info = { id: canonicalId, nome: r.nome, filial: r.filial, cargo: r.cargo, email: r.email };
+    const filial = resolveCanonicalFilial(r.filial, canonicalByKey) || 'Matriz / Sem Unidade';
+    const info = { id: canonicalId, nome: r.nome, filial, cargo: r.cargo, email: r.email };
     if (id) lookup.set('id:' + id, info);
     if (email) lookup.set('email:' + email, info);
     roster.set(canonicalId, info);
@@ -135,7 +208,7 @@ function buildRankingUnidades(certRows, activeIndex) {
 
   for (const [id, info] of roster.entries()) {
     const filial = normFilial(info.filial);
-    if (!byFilial.has(filial)) byFilial.set(filial, { certificados: 0, comCertificado: new Set(), ativos: new Set() });
+    if (!byFilial.has(filial)) byFilial.set(filial, { certificados: 0, comCertificado: new Map(), ativos: new Set() });
     byFilial.get(filial).ativos.add(id);
   }
 
@@ -145,7 +218,7 @@ function buildRankingUnidades(certRows, activeIndex) {
     const filial = normFilial(investor.filial);
     const entry = byFilial.get(filial);
     entry.certificados += 1;
-    entry.comCertificado.add(investor.id);
+    entry.comCertificado.set(investor.id, { nome: investor.nome, email: investor.email });
   }
 
   const list = [];
@@ -153,6 +226,9 @@ function buildRankingUnidades(certRows, activeIndex) {
     const ativos = v.ativos.size;
     const media = ativos > 0 ? v.certificados / ativos : 0;
     const engajamento = ativos > 0 ? (v.comCertificado.size / ativos) * 100 : 0;
+    const pessoasCertificadas = Array.from(v.comCertificado.values())
+      .sort((a, b) => a.nome.localeCompare(b.nome))
+      .map(p => `${p.nome} — ${p.email}`);
     list.push({
       nome: filial,
       certificados: v.certificados,
@@ -162,6 +238,7 @@ function buildRankingUnidades(certRows, activeIndex) {
       media,
       engajamento,
       elegivelPodio: ativos >= MIN_ATIVOS_PODIO,
+      pessoasCertificadas,
     });
   }
   list.sort((a, b) => b.media - a.media || b.engajamento - a.engajamento);
