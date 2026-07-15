@@ -6,10 +6,10 @@
 <title>V4 · Ranking de Certificados</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
-<link rel="stylesheet" href="style.css?v=3" />
+<link rel="stylesheet" href="style.css?v=4" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=3"></script>
-<script src="common.js?v=3"></script>
+<script src="config.js?v=4"></script>
+<script src="common.js?v=4"></script>
 </head>
 <body>
   <div class="topbar">
@@ -129,21 +129,43 @@ function renderTable(containerId, list, tipo, opts) {
     </div>`;
   const rows = list.map((item, idx) => {
     const pos = idx + 1;
+    const expandable = opts.expandable && item.certificadosNomes && item.certificadosNomes.length > 0;
+    const rowAttrs = expandable ? `class="rank-row expandable" data-idx="${idx}"` : `class="rank-row"`;
+    const detail = expandable ? `
+      <div class="rank-detail" id="${containerId}-detail-${idx}" style="display:none;">
+        <div class="rank-detail-chips">
+          ${item.certificadosNomes.map(n => `<span class="cert-chip">${n}</span>`).join('')}
+        </div>
+      </div>` : '';
     return `
-      <div class="rank-row">
+      <div ${rowAttrs}>
         <span class="rank-pos ${pos <= 3 ? 'top3' : ''}">${pos}</span>
         <span class="rank-name">${item.nome}${opts.metaFn ? `<span class="meta">${opts.metaFn(item)}</span>` : ''}</span>
         <span class="col-invest">${opts.col2Fn ? opts.col2Fn(item) : ''}</span>
         <span class="col-media">${opts.col3Fn ? opts.col3Fn(item) : ''}</span>
-        <span class="rank-metric">${opts.metricFn(item)}</span>
-      </div>`;
+        <span class="rank-metric">${opts.metricFn(item)}${expandable ? '<span class="expand-caret">▾</span>' : ''}</span>
+      </div>
+      ${detail}`;
   }).join('');
   el.innerHTML = head + rows;
+
+  if (opts.expandable) {
+    el.querySelectorAll('.rank-row.expandable').forEach(row => {
+      row.addEventListener('click', () => {
+        const idx = row.dataset.idx;
+        const detail = document.getElementById(`${containerId}-detail-${idx}`);
+        if (!detail) return;
+        const isOpen = detail.style.display !== 'none';
+        detail.style.display = isOpen ? 'none' : 'block';
+        row.classList.toggle('open', !isOpen);
+      });
+    });
+  }
 }
 
 // ---------- Load & compute ----------
 async function loadData() {
-  const { data: rows, error } = await supa.from('certificados').select('id_usuario,nome,filial,cargo,data_emissao,atualizado_em');
+  const { data: rows, error } = await supa.from('certificados').select('id_usuario,nome,filial,cargo,conteudo,data_emissao,atualizado_em');
   if (error) {
     document.getElementById('updatedChip').textContent = 'Erro ao carregar dados';
     console.error(error);
@@ -151,10 +173,10 @@ async function loadData() {
   }
   allCertRows = rows;
 
-  const { data: ativosRows, error: ativosErr } = await supa.from('investidores_ativos').select('id_usuario,nome,filial,cargo,ativo').eq('ativo', true);
+  const { data: ativosRows, error: ativosErr } = await supa.from('investidores_ativos').select('id_usuario,nome,email,filial,cargo,ativo').eq('ativo', true);
   if (ativosErr) console.error(ativosErr);
   const activeInvestorsMap = new Map();
-  (ativosRows || []).forEach(r => activeInvestorsMap.set(String(r.id_usuario).trim(), { nome: r.nome, filial: r.filial, cargo: r.cargo }));
+  (ativosRows || []).forEach(r => activeInvestorsMap.set(String(r.id_usuario).trim(), { nome: r.nome, filial: r.filial, cargo: r.cargo, email: r.email }));
 
   // último snapshot anterior a hoje, pra calcular variação
   const today = new Date().toISOString().slice(0, 10);
@@ -262,9 +284,10 @@ function applyInvestidorFilters() {
 
   renderTable('tableInvestidores', filtered, 'investidor', {
     nameLabel: 'Investidor',
-    metaFn: i => `${i.filial} · ${i.cargo}`,
+    metaFn: i => `${i.filial} · ${i.cargo}${i.email ? ' · ' + i.email : ''}`,
     metricLabel: 'Certificados',
     metricFn: i => fmtInt(i.certificados),
+    expandable: true,
   });
 }
 
