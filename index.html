@@ -6,10 +6,10 @@
 <title>V4 · Ranking de Certificados</title>
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
-<link rel="stylesheet" href="style.css?v=4" />
+<link rel="stylesheet" href="style.css?v=6" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="config.js?v=4"></script>
-<script src="common.js?v=4"></script>
+<script src="config.js?v=6"></script>
+<script src="common.js?v=6"></script>
 </head>
 <body>
   <div class="topbar">
@@ -165,45 +165,44 @@ function renderTable(containerId, list, tipo, opts) {
 
 // ---------- Load & compute ----------
 async function loadData() {
-  const { data: rows, error } = await supa.from('certificados').select('id_usuario,nome,filial,cargo,conteudo,data_emissao,atualizado_em');
-  if (error) {
+  let rows, ativosRows;
+  try {
+    rows = await fetchAllRows(() => supa.from('certificados').select('id_usuario,nome,email,filial,cargo,conteudo,data_emissao'));
+    ativosRows = await fetchAllRows(() => supa.from('investidores_ativos').select('id_usuario,nome,email,filial,cargo,ativo').eq('ativo', true));
+  } catch (e) {
     document.getElementById('updatedChip').textContent = 'Erro ao carregar dados';
-    console.error(error);
+    console.error(e);
     return;
   }
   allCertRows = rows;
 
-  const { data: ativosRows, error: ativosErr } = await supa.from('investidores_ativos').select('id_usuario,nome,email,filial,cargo,ativo').eq('ativo', true);
-  if (ativosErr) console.error(ativosErr);
-  const activeInvestorsMap = new Map();
-  (ativosRows || []).forEach(r => activeInvestorsMap.set(String(r.id_usuario).trim(), { nome: r.nome, filial: r.filial, cargo: r.cargo, email: r.email }));
+  const activeIndex = buildActiveLookup(ativosRows);
 
   // último snapshot anterior a hoje, pra calcular variação
   const today = new Date().toISOString().slice(0, 10);
-  const { data: snapDates } = await supa
-    .from('snapshots_ranking')
-    .select('data_snapshot')
-    .order('data_snapshot', { ascending: false });
+  let snapDates = [];
+  try {
+    snapDates = await fetchAllRows(() => supa.from('snapshots_ranking').select('data_snapshot').order('data_snapshot', { ascending: false }));
+  } catch (e) { console.error(e); }
 
   const uniqueDates = [...new Set((snapDates || []).map(r => r.data_snapshot))];
   const priorDate = uniqueDates.find(d => d !== today);
 
   if (priorDate) {
-    const { data: prevRows } = await supa
-      .from('snapshots_ranking')
-      .select('tipo,nome_entidade,posicao')
-      .eq('data_snapshot', priorDate);
-    (prevRows || []).forEach(r => {
-      prevSnapshot[r.tipo].set(r.nome_entidade, r.posicao);
-    });
+    try {
+      const prevRows = await fetchAllRows(() => supa.from('snapshots_ranking').select('tipo,nome_entidade,posicao').eq('data_snapshot', priorDate));
+      (prevRows || []).forEach(r => {
+        prevSnapshot[r.tipo].set(r.nome_entidade, r.posicao);
+      });
+    } catch (e) { console.error(e); }
   }
 
-  unidadesRanking = buildRankingUnidades(allCertRows, activeInvestorsMap);
-  investidoresRanking = buildRankingInvestidores(allCertRows, activeInvestorsMap);
+  unidadesRanking = buildRankingUnidades(allCertRows, activeIndex);
+  investidoresRanking = buildRankingInvestidores(allCertRows, activeIndex);
 
-  const lastUpdate = rows.reduce((max, r) => (r.atualizado_em && r.atualizado_em > max ? r.atualizado_em : max), '');
-  document.getElementById('updatedChip').textContent = lastUpdate
-    ? `Atualizado em ${new Date(lastUpdate).toLocaleDateString('pt-BR')}`
+  const latestDate = uniqueDates[0];
+  document.getElementById('updatedChip').textContent = latestDate
+    ? `Atualizado em ${new Date(latestDate + 'T00:00:00').toLocaleDateString('pt-BR')}`
     : `${fmtInt(rows.length)} certificados na base`;
 
   renderUnidades();
